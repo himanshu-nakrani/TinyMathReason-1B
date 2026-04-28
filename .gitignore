@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data & Checkpoints (Don't commit massive files!)
+/data/
+*.parquet
+*.jsonl.zst
+*.tfrecord
+*.array_record
+/tokenizer/
+/hf_checkpoints/
+/sft_data/
+/sft_output/
+/dpo_data/
+/dpo_output/
+/grpo_output/
+
+# Logs and Eval results
+/logs/
+/eval_results/
+*.log
+
+# C environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# MaxText & JAX
+MaxText/
+.jax_cache/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# MacOS
+.DS_Store
