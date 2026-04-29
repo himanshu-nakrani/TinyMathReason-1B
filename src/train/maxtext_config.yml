@@ -1,0 +1,53 @@
+# TinyMathReason-1B Pretraining Configuration for MaxText
+
+# Architecture Config Override
+# This maps our 1.12B config to MaxText's names
+model_name: "tinymath-1b"
+
+base_emb_dim: 2048
+base_num_heads: 16
+base_num_kv_heads: 4
+base_mlp_dim: 5632
+base_num_decoder_layers: 22
+head_dim: 128
+vocab_size: 32000
+attention: "dot_product"
+normalization_layer: "rms"
+
+# Sequence length
+max_target_length: 4096
+
+# Data loading
+dataset_path: "gs://tinymath-bucket/pretraining-data/shards"
+dataset_type: "jsonl"
+tokenizer_path: "gs://tinymath-bucket/tokenizer/tokenizer.tiktoken"
+
+# Optimization
+learning_rate: 0.0003
+warmup_steps: 2000
+cosine_learning_rate_final_fraction: 0.1
+opt_type: "adamw"
+adam_b1: 0.9
+adam_b2: 0.95
+adam_eps: 1.0e-8
+adam_weight_decay: 0.1
+gradient_clipping_threshold: 1.0
+
+# Batching & Scale
+per_device_batch_size: 8   # Will yield 8 * 32 * 4096 = 1,048,576 tokens per step
+steps: 300000              # Total steps (~314B tokens)
+
+# Checkpointing (save every 5000 steps to GCS)
+save_period: 5000
+base_output_directory: "gs://tinymath-bucket/checkpoints"
+run_name: "tinymath-1b-run1"
+
+# Hardware / Compilation
+dtype: "bfloat16"
+compile_topology: "v4-32"  # Ensure it compiles for our specific topology
+compile_topology_num_slices: 1
+
+# Logging
+enable_wandb: True
+wandb_project: "tinymath-1b-pretrain"
+log_period: 100

@@ -1,0 +1,6 @@
+lm-eval>=0.4.2
+torch>=2.2.0
+transformers>=4.40.0
+matplotlib>=3.8.0
+pandas>=2.2.0
+wandb>=0.16.0

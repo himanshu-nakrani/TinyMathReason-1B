@@ -1,0 +1,34 @@
+# TinyMathReason-1B Project Status
+
+This document tracks our progress through the accelerated Execution Plan.
+
+## Phase 1: Setup & Data Prep (Days 1-5)
+- [x] Project setup complete (Repo structured, `venv` created, dependencies installed).
+- [x] Train custom 32k math tokenizer on sample data (`tokenizer.tiktoken` generated).
+- [ ] Spin up two Vultr `c2-standard-30` instances to process data in parallel.
+- [ ] Node A: Download, clean, MinHash, and pack FineWeb-Edu.
+- [ ] Node B: Download, clean, MinHash, and pack OpenWebMath, Proof-Pile-2, Stack-Edu.
+- [ ] Upload all `jsonl.zst` shards to GCS bucket. Terminate Vultr before May 5th.
+
+## Phase 2: Pretraining (Days 6-15)
+- [ ] Provision `v5litepod-64` and run MaxText smoke test.
+- [ ] Launch main pretraining run on `v5litepod-64`.
+- [ ] Provision `v4-32` auxiliary cluster.
+- [ ] Run continuous `lm-eval` benchmarks on intermediate checkpoints using `v4-32`.
+- [ ] Pretraining finishes. Final 300B token checkpoint saved.
+- [ ] Convert Orbax to HF Safetensors.
+
+## Phase 3: Post-Training SFT (Days 16-17)
+- [ ] Provision AMD MI300X instance.
+- [ ] Prepare SFT data (MathInstruct, MetaMathQA, GSM8K).
+- [ ] Run PyTorch SFTTrainer on MI300X.
+
+## Phase 4: Post-Training DPO/GRPO (Days 18-20)
+- [ ] Generate preference candidate data using Modal serverless endpoints.
+- [ ] Run DPOTrainer or GRPOTrainer on the AMD MI300X.
+
+## Phase 5: Evaluation & Release (Days 21-23)
+- [ ] Run full suite of benchmarks (`make eval`) on the MI300X.
+- [ ] Use Lightning AI to plot training curves and draft report.
+- [ ] Use Thunder Compute to host Gradio UI demo.
+- [ ] Release Report, Model Card, and GitHub Repo.

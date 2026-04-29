@@ -1,0 +1,6 @@
+# JAX is typically installed via MaxText's setup.sh or specific TPU wheel
+# See docs/pretraining_setup.md
+matplotlib>=3.8.0
+pandas>=2.2.0
+wandb>=0.16.0
+orbax-checkpoint>=0.5.0
