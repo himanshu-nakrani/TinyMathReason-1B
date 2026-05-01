@@ -14,6 +14,10 @@ def process_shard(args):
     out_file = out_dir / f"shard_{shard_idx:06d}.jsonl.zst"
     total_tokens = 0
     
+    if out_file.exists():
+        return shard_idx, 0
+    
+    
     try:
         cctx = zstd.ZstdCompressor(level=3)
         table = pq.read_table(f)
@@ -41,8 +45,8 @@ def create_shards(input_dir: str, output_dir: str):
     files = list(in_dir.glob("*.parquet"))
     tasks = [(f, out_dir, i) for i, f in enumerate(files)]
     
-    # We can use all cores here because zstd compression is CPU bound but memory light.
-    num_cores = cpu_count()
+    # Limit cores to prevent OOM
+    num_cores = 14
     logging.info(f"Creating jsonl.zst shards using {num_cores} cores...")
     
     total_tokens = 0
