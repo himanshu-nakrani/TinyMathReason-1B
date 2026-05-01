@@ -6,9 +6,9 @@ This document tracks our progress through the accelerated Execution Plan.
 - [x] Project setup complete (Repo structured, `venv` created, dependencies installed).
 - [x] Train custom 32k math tokenizer on sample data (`tokenizer.tiktoken` generated).
 - [x] Spin up two Vultr `c2-standard-30` instances to process data in parallel.
-- [x] Node A: Download, clean, MinHash, and pack FineWeb-Edu.
-- [ ] Node B: Download, clean, MinHash, and pack OpenWebMath, Proof-Pile-2, Stack-Edu.
-- [ ] Upload all `jsonl.zst` shards to GCS bucket. Terminate Vultr before May 5th.
+- [x] Node A: Download, clean, MinHash, and pack FineWeb-Edu and MathPile.
+- [x] Node B: Download, clean, MinHash, and pack OpenWebMath and Stack-Edu.
+- [x] Upload all `jsonl.zst` shards to GCS bucket (`gs://tinymath-reason-data-himanshu/pretraining-data/`). Vultr nodes destroyed.
 
 ## Phase 2: Pretraining (Days 6-15)
 - [ ] Provision `v5litepod-64` and run MaxText smoke test.
