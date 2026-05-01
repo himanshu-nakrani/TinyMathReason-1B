@@ -30,7 +30,7 @@ def download_datasets(output_dir: str):
             # In Vultr, we have large SSDs.
             
             # Using streaming to save direct to chunked parquets locally
-            ds = load_dataset(info["path"], name=info["name"], split=info["split"], streaming=True)
+            ds = load_dataset(info["path"], name=info["name"], split=info["split"], streaming=True, trust_remote_code=True)
             
             ds_out_dir = out_dir / ds_id
             ds_out_dir.mkdir(exist_ok=True)
