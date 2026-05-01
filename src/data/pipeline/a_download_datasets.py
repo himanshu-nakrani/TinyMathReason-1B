@@ -29,8 +29,8 @@ def download_datasets(output_dir: str):
             # to cache it locally in ~/.cache/huggingface, then we just symlink or rely on cache.
             # In Vultr, we have large SSDs.
             
-            # Using streaming to save direct to chunked parquets locally
-            ds = load_dataset(info["path"], name=info["name"], split=info["split"], streaming=True, trust_remote_code=True)
+            # We have plenty of disk space, so we disable streaming to avoid the zstd decompression bugs.
+            ds = load_dataset(info["path"], name=info["name"], split=info["split"], streaming=False, trust_remote_code=True)
             
             ds_out_dir = out_dir / ds_id
             ds_out_dir.mkdir(exist_ok=True)
