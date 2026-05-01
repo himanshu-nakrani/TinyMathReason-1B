@@ -24,6 +24,7 @@ def mix_datasets(input_dir: str, output_dir: str, chunk_size: int = 50000):
         "fineweb-edu": 0.40,
         "openwebmath": 0.35,
         "proof-pile-2": 0.15,
+        "mathpile": 0.15,
         "stack-edu": 0.10
     }
     
