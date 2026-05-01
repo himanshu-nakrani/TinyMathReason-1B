@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 DATASETS = {
     "fineweb-edu": {"path": "HuggingFaceFW/fineweb-edu", "split": "train", "name": "sample-10BT"},
     "openwebmath": {"path": "open-web-math/open-web-math", "split": "train", "name": None},
-    "proof-pile-2": {"path": "EleutherAI/proof-pile-2", "split": "train", "name": "arxiv"},
+    "mathpile": {"path": "GAIR/MathPile", "split": "train", "name": None},
     "stack-edu": {"path": "HuggingFaceTB/smollm-corpus", "split": "train", "name": "cosmopedia-v2"} # Approximation of Stack-Edu
 }
 
@@ -29,8 +29,9 @@ def download_datasets(output_dir: str):
             # to cache it locally in ~/.cache/huggingface, then we just symlink or rely on cache.
             # In Vultr, we have large SSDs.
             
-            # We have plenty of disk space, so we disable streaming to avoid the zstd decompression bugs.
-            ds = load_dataset(info["path"], name=info["name"], split=info["split"], streaming=False, trust_remote_code=True)
+            # We use streaming=True for MathPile because it uses .gz (which streams perfectly)
+            # and streaming bypasses the Arrow schema generation which often crashes on huge datasets.
+            ds = load_dataset(info["path"], name=info["name"], split=info["split"], streaming=True, trust_remote_code=True)
             
             ds_out_dir = out_dir / ds_id
             ds_out_dir.mkdir(exist_ok=True)

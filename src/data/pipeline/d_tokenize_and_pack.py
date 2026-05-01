@@ -11,6 +11,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 def process_file(args):
     f, out_dir, tokenizer_path, seq_len = args
+    
+    # Check if we already successfully packed this file before an OOM crash
+    if any(out_dir.glob(f"packed_{f.stem}_*.parquet")):
+        return True
+        
     tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
     eos_id = tokenizer.eos_token_id
     
