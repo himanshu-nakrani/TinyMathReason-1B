@@ -32,31 +32,48 @@ python src/train/convert_checkpoint.py \
     --tokenizer_path ./tokenizer
 ```
 
-## 3. Data Preparation
+## 3. Two-Stage Curriculum Preparation
 
-Format the datasets into ChatML:
+Based on the research "Can Tiny Language Models Reason?", we use a two-stage Supervised Fine-Tuning approach to prevent the model from forgetting how to talk.
 
+**Stage 1: Conversational Prior**
+First, we train on general instruction-following and chat formats *without* any chain-of-thought traces.
 ```bash
 cd src/sft
-python prepare_sft_data.py --output_dir ./sft_data
+python prepare_sft_data.py --stage 1 --output_dir ./sft_data/stage1_chat
 ```
 
-## 4. Run SFT Training
+**Stage 2: Reasoning Traces**
+Next, we train on complex math datasets (MathInstruct, OpenThoughts) that utilize the `<think>` and `</think>` tags.
+```bash
+python prepare_sft_data.py --stage 2 --output_dir ./sft_data/stage2_reasoning
+```
 
-With the massive 192GB memory of the MI300X, you can likely run SFT without deepspeed, or with a very aggressive DeepSpeed config to maximize throughput.
+## 4. Run SFT Training (Two Stages)
 
-Run training with Accelerate:
+**CRITICAL:** Before starting SFT, ensure your HuggingFace tokenizer config has been updated to include `<think>` and `</think>` as special tokens, and pass `--resize_token_embeddings` to your training script to add +2 to the vocabulary size.
 
 ```bash
 # Initialize wandb
 wandb login
 
-# Launch
-accelerate launch \
-    train_sft.py --config sft_config.yaml
+# Stage 1: Teach it to talk
+accelerate launch train_sft.py \
+    --config sft_config_stage1.yaml \
+    --dataset_path ./sft_data/stage1_chat \
+    --output_dir ./hf_checkpoints/tinymath-1b-stage1
+
+# Stage 2: Teach it to reason
+accelerate launch train_sft.py \
+    --config sft_config_stage2.yaml \
+    --dataset_path ./sft_data/stage2_reasoning \
+    --model_path ./hf_checkpoints/tinymath-1b-stage1 \
+    --resize_token_embeddings \
+    --output_dir ./hf_checkpoints/tinymath-1b-stage2
 ```
 
 ## Expected SFT Metrics
-- **Dataset**: ~600k examples
 - **Hardware**: 1x AMD MI300X 192GB
 - **Time**: Due to the massive batch size capability, expect this to finish extremely fast.
+- **Stage 1 Target**: Model follows instructions and responds correctly without thinking.
+- **Stage 2 Target**: Model naturally opens `<think>` tags and writes long chains of thought before answering.

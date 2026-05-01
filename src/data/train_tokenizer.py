@@ -28,7 +28,9 @@ def train_tokenizer(output_dir: str, vocab_size: int = 32000):
         "<|unk|>", 
         "<|pad|>",
         "<|im_start|>", 
-        "<|im_end|>"
+        "<|im_end|>",
+        "<think>",
+        "</think>"
     ]
     
     trainer = trainers.BpeTrainer(

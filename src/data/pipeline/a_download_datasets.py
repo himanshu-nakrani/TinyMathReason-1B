@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 DATASETS = {
     "fineweb-edu": {"path": "HuggingFaceFW/fineweb-edu", "split": "train", "name": "sample-10BT"},
     "openwebmath": {"path": "open-web-math/open-web-math", "split": "train", "name": None},
-    "proof-pile-2": {"path": "hoskinson-center/proof-pile-v2", "split": "train", "name": "default"},
+    "proof-pile-2": {"path": "EleutherAI/proof-pile-2", "split": "train", "name": "arxiv"},
     "stack-edu": {"path": "HuggingFaceTB/smollm-corpus", "split": "train", "name": "cosmopedia-v2"} # Approximation of Stack-Edu
 }
 

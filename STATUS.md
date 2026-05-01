@@ -5,8 +5,8 @@ This document tracks our progress through the accelerated Execution Plan.
 ## Phase 1: Setup & Data Prep (Days 1-5)
 - [x] Project setup complete (Repo structured, `venv` created, dependencies installed).
 - [x] Train custom 32k math tokenizer on sample data (`tokenizer.tiktoken` generated).
-- [ ] Spin up two Vultr `c2-standard-30` instances to process data in parallel.
-- [ ] Node A: Download, clean, MinHash, and pack FineWeb-Edu.
+- [x] Spin up two Vultr `c2-standard-30` instances to process data in parallel.
+- [x] Node A: Download, clean, MinHash, and pack FineWeb-Edu.
 - [ ] Node B: Download, clean, MinHash, and pack OpenWebMath, Proof-Pile-2, Stack-Edu.
 - [ ] Upload all `jsonl.zst` shards to GCS bucket. Terminate Vultr before May 5th.
 
@@ -20,8 +20,8 @@ This document tracks our progress through the accelerated Execution Plan.
 
 ## Phase 3: Post-Training SFT (Days 16-17)
 - [ ] Provision AMD MI300X instance.
-- [ ] Prepare SFT data (MathInstruct, MetaMathQA, GSM8K).
-- [ ] Run PyTorch SFTTrainer on MI300X.
+- [ ] Stage 1 SFT: Prepare data and train on conversational prior (No CoT).
+- [ ] Stage 2 SFT: Resize tokenizer (+ `<think>`) and train on reasoning traces (MathInstruct, OpenThoughts).
 
 ## Phase 4: Post-Training DPO/GRPO (Days 18-20)
 - [ ] Generate preference candidate data using Modal serverless endpoints.
