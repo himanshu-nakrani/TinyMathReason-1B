@@ -23,7 +23,7 @@ Copy your configuration file (`src/train/maxtext_config.yml`) into the `maxtext/
 
 Run a quick 1000-step smoke test first:
 ```bash
-python MaxText/train.py \
+python src/maxtext/trainers/pre_train/train.py \
     MaxText/configs/tinymath_1b.yml \
     run_name=tinymath_smoke_test \
     steps=1000
@@ -31,7 +31,7 @@ python MaxText/train.py \
 
 Once verified, launch the main run:
 ```bash
-python MaxText/train.py \
+python src/maxtext/trainers/pre_train/train.py \
     MaxText/configs/tinymath_1b.yml \
     run_name=tinymath_main_run \
     steps=300000
@@ -44,7 +44,7 @@ nohup python src/train/preemption_handler.py \
   --project YOUR_PROJECT_ID \
   --zone YOUR_ZONE \
   --tpu_name YOUR_TPU_NAME \
-  --script_path "python MaxText/train.py MaxText/configs/tinymath_1b.yml run_name=tinymath_main_run" &
+  --script_path "python src/maxtext/trainers/pre_train/train.py MaxText/configs/tinymath_1b.yml run_name=tinymath_main_run" &
 ```
 
 ## 5. Evals on `v4-32`
