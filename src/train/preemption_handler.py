@@ -2,19 +2,18 @@
 import time
 import subprocess
 import logging
+import argparse
+import sys
+import os
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-def launch_training():
-    """Starts the MaxText training script via a subprocess."""
-    # We use stdbuf to ensure logs are written to stdout without buffering
-    cmd = [
-        "python3", "MaxText/train.py",
-        "../src/train/maxtext_config.yml"
-    ]
-    logging.info(f"Launching training: {' '.join(cmd)}")
-    return subprocess.Popen(cmd)
+def launch_training(script_path):
+    """Starts the training script via a subprocess."""
+    logging.info(f"Launching training: {script_path}")
+    # We use shell=True to allow complex commands with arguments
+    return subprocess.Popen(script_path, shell=True)
 
 def check_preemption_status():
     """
@@ -29,18 +28,22 @@ def check_preemption_status():
         )
         if result.stdout.strip() == "TRUE":
             return True
-    except Exception as e:
+    except Exception:
         # If we are not on GCP, or curl fails, we return False
         pass
     return False
 
 def main():
-    """
-    Monitors training and handles spot instance preemptions.
-    If preemption is detected, we could try to gracefully save, but MaxText handles 
-    async checkpointing. So we just sleep until the VM is actually terminated.
-    If the training process crashes (OOM, etc.), we restart it.
-    """
+    parser = argparse.ArgumentParser(description="Monitor training and handle preemptions.")
+    parser.add_argument("--script_path", type=str, required=True, 
+                        help="The full command to run the training script (e.g. 'python3 MaxText/train.py ...')")
+    parser.add_argument("--project", type=str, help="GCP Project ID (optional, for logging)")
+    parser.add_argument("--zone", type=str, help="GCP Zone (optional, for logging)")
+    parser.add_argument("--tpu_name", type=str, help="TPU Name (optional, for logging)")
+    args = parser.parse_args()
+
+    logging.info(f"Starting preemption handler for {args.tpu_name or 'current TPU'}")
+    
     process = None
     
     while True:
@@ -50,14 +53,14 @@ def main():
                 logging.warning(f"Training process exited with code {process.returncode}. Restarting in 60s...")
                 time.sleep(60)
             
-            process = launch_training()
+            process = launch_training(args.script_path)
             
         # Check GCP preemption metadata
         if check_preemption_status():
             logging.warning("!!! PREEMPTION SIGNAL RECEIVED !!!")
             logging.warning("The TPU VM will be terminated within 30 seconds.")
-            # MaxText should ideally be configured to catch SIGTERM and save a checkpoint.
-            # But async checkpointing every N steps is safer. We just wait for the inevitable.
+            # We don't kill the process; we let it run until the VM is terminated.
+            # MaxText should be configured for async checkpointing.
             time.sleep(60) 
             
         time.sleep(30)

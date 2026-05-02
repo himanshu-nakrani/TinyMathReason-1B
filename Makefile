@@ -15,6 +15,11 @@ data:
 pretrain:
 	@echo "Pretraining must be run on the TPU VM. Please refer to docs/pretraining_setup.md."
 
+pretrain-setup:
+	@echo "1. SSH into the TPU VM: gcloud compute tpus tpu-vm ssh node-v4-32-spot-uc2b --zone us-central2-b --project gen-lang-client-0318750942"
+	@echo "2. On the TPU VM, run the setup script:"
+	@echo "   curl -s https://raw.githubusercontent.com/your-username/TinyMathReason-1B/main/scripts/setup_tpu_vm.sh | bash"
+
 sft:
 	cd src/sft && python prepare_sft_data.py
 	cd src/sft && accelerate launch train_sft.py
