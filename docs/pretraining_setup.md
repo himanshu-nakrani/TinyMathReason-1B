@@ -3,9 +3,8 @@
 This phase utilizes Google Cloud TPUs for extremely fast and cost-effective pretraining.
 
 ## Hardware Strategy
-We utilize two spot TPU clusters:
-1. **`v5litepod-64` (Main Training):** 64 chips of v5e. This is our primary workhorse. MaxText scales perfectly here, yielding ~200k+ tokens/sec.
-2. **`v4-32` (Auxiliary / Evals):** 32 chips of v4. Used to continuously pull checkpoints from GCS and run `lm-eval` to watch performance curves in real-time without pausing the main cluster.
+We utilize one spot TPU cluster:
+1. **`v4-32` (Main Training & Evals):** 32 chips of v4. This will be used for both the primary MaxText pretraining run and running periodic evaluations.
 
 ## 1. Setup TPU Environment
 
@@ -20,7 +19,7 @@ bash setup.sh
 ## 2. Configure MaxText
 Copy your configuration file (`src/train/maxtext_config.yml`) into the `maxtext/configs/` directory. Ensure `dataset_path` points to your GCS bucket.
 
-## 3. Launching the Run on `v5litepod-64`
+## 3. Launching the Run on `v4-32`
 
 Run a quick 1000-step smoke test first:
 ```bash
@@ -48,5 +47,5 @@ nohup python src/train/preemption_handler.py \
   --script_path "python MaxText/train.py MaxText/configs/tinymath_1b.yml run_name=tinymath_main_run" &
 ```
 
-## 5. Auxiliary Evals on `v4-32`
-While the main run happens, SSH into your `v4-32` cluster. You can run `src/eval/run_benchmarks.py` directly by passing it the GCS checkpoint paths (once converted to HuggingFace format using the `convert_checkpoint.py` script).
+## 5. Evals on `v4-32`
+You can run `src/eval/run_benchmarks.py` by passing it the GCS checkpoint paths (once converted to HuggingFace format using the `convert_checkpoint.py` script). You may need to pause the main training run to free up HBM.

@@ -72,7 +72,7 @@ SFT data utilizes MathInstruct, MetaMathQA, and GSM8K.
 ## Hardware Requirements 💻
 
 - **Data Processing:** 2x Vultr `c2-standard-30` (30+ vCPUs, 120GB RAM, 1TB+ NVMe SSD)
-- **Pretraining:** Google Cloud TPU `v5litepod-64` (Main) + `v4-32` (Evals)
+- **Pretraining:** Google Cloud TPU `v4-32` (Main & Evals)
 - **SFT & DPO:** 1x AMD MI300X (192GB VRAM) via AMD Cloud
 - **DPO Generation:** Serverless scale-out via Modal
 - **Tracking/Demos:** Lightning AI & Thunder Compute

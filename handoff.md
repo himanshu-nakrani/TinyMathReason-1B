@@ -48,7 +48,7 @@ All data is stored in the Google Cloud bucket: `gs://tinymath-reason-data-himans
 The data pipeline is fully complete and all code changes were pushed to the `main` branch. 
 
 **Immediate Objectives for Phase 2:**
-1. Provision a Google Cloud `v5litepod-64` (TPU v5e cluster) using Google Kubernetes Engine (GKE) or directly via Queued Resources.
+1. Provision a Google Cloud `v4-32` (TPU v4 cluster) using Google Kubernetes Engine (GKE) or directly via Queued Resources.
 2. Set up the `MaxText` pretraining repository.
 3. Configure the MaxText dataloader to read from the multiple subdirectories in `gs://tinymath-reason-data-himanshu/pretraining-data/`.
 4. Execute a quick "Smoke Test" pretraining run (100 steps) to ensure the TPUs are correctly streaming the `.jsonl.zst` shards from the bucket without bottlenecks.

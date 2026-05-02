@@ -18,9 +18,9 @@ normalization_layer: "rms"
 max_target_length: 4096
 
 # Data loading
-dataset_path: "gs://tinymath-bucket/pretraining-data/shards"
+dataset_path: "gs://tinymath-reason-data-himanshu/pretraining-data"
 dataset_type: "jsonl"
-tokenizer_path: "gs://tinymath-bucket/tokenizer/tokenizer.tiktoken"
+tokenizer_path: "gs://tinymath-reason-data-himanshu/tokenizer/tokenizer.tiktoken"
 
 # Optimization
 learning_rate: 0.0003
@@ -39,7 +39,7 @@ steps: 300000              # Total steps (~314B tokens)
 
 # Checkpointing (save every 5000 steps to GCS)
 save_period: 5000
-base_output_directory: "gs://tinymath-bucket/checkpoints"
+base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
 run_name: "tinymath-1b-run1"
 
 # Hardware / Compilation

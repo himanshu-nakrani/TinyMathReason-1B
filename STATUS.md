@@ -11,10 +11,9 @@ This document tracks our progress through the accelerated Execution Plan.
 - [x] Upload all `jsonl.zst` shards to GCS bucket (`gs://tinymath-reason-data-himanshu/pretraining-data/`). Vultr nodes destroyed.
 
 ## Phase 2: Pretraining (Days 6-15)
-- [ ] Provision `v5litepod-64` and run MaxText smoke test.
-- [ ] Launch main pretraining run on `v5litepod-64`.
-- [ ] Provision `v4-32` auxiliary cluster.
-- [ ] Run continuous `lm-eval` benchmarks on intermediate checkpoints using `v4-32`.
+- [ ] Provision `v4-32` cluster and run MaxText smoke test.
+- [ ] Launch main pretraining run on `v4-32`.
+- [ ] Run continuous `lm-eval` benchmarks on intermediate checkpoints.
 - [ ] Pretraining finishes. Final 300B token checkpoint saved.
 - [ ] Convert Orbax to HF Safetensors.
 
