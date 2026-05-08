@@ -22,9 +22,11 @@ pip install --upgrade packaging hatchling hatch-requirements-txt editables
 pip install -e . --no-build-isolation
 
 # 4. Install missing runtime dependencies
-pip install omegaconf 'protobuf<5.0.0' pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement cloud_tpu_diagnostics
-echo "Upgrading JAX to JAX-nightly TPU release..."
-pip install -U --pre jax jaxlib libtpu-nightly requests -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+pip install omegaconf 'protobuf<5.0.0' pydantic jaxtyping grain-nightly safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement cloud_tpu_diagnostics ml-collections
+echo "Purging conflicting JAX and TPU nightly builds..."
+pip uninstall -y jax jaxlib libtpu libtpu-nightly
+echo "Installing stable JAX with TPU support..."
+pip install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
 # 5. Force upgrade Flax from GitHub for bleeding-edge nnx
 pip install --upgrade --force-reinstall git+https://github.com/google/flax.git
@@ -63,10 +65,19 @@ python3 patch_sharding.py
 cat << 'EOF' > mock_injector.py
 import sys
 import functools
+import os
+
+# Isolate TensorFlow from the TPU device scan to prevent PJRT hardware conflicts
+try:
+    import tensorflow as tf
+    tf.config.set_visible_devices([], 'TPU')
+except Exception:
+    pass
+
 import jax
 from unittest.mock import MagicMock
 
-# Monkey-patch jax.jit to support decorator factory pattern (broken in recent JAX nightly)
+# Monkey-patch jax.jit to support decorator factory pattern (broken in recent JAX nightly/stable)
 if getattr(jax, "_is_monkey_patched", False) is False:
     _original_jit = jax.jit
     def _patched_jit(fun=None, **kwargs):
@@ -75,6 +86,15 @@ if getattr(jax, "_is_monkey_patched", False) is False:
         return _original_jit(fun, **kwargs)
     jax.jit = _patched_jit
     jax._src.api.jit = _patched_jit
+    
+    # Patch jax.config.update to ignore unsupported experimental flags in stable JAX
+    _original_config_update = jax.config.update
+    def _patched_config_update(name, value):
+        try:
+            _original_config_update(name, value)
+        except AttributeError:
+            pass
+    jax.config.update = _patched_config_update
     jax._is_monkey_patched = True
 
 # Mock internal Google pathways
@@ -103,7 +123,7 @@ sys.modules["drjax"] = MagicMock()
 EOF
 
 # Inject the mock loader at the top of train.py if not already injected
-if ! grep -q "Monkey-patch jax.jit" src/maxtext/trainers/pre_train/train.py; then
+if ! grep -q "Mock internal Google pathways" src/maxtext/trainers/pre_train/train.py; then
     cat mock_injector.py src/maxtext/trainers/pre_train/train.py > temp.py
     mv temp.py src/maxtext/trainers/pre_train/train.py
 fi

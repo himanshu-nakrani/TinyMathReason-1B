@@ -2,30 +2,30 @@
 
 # Architecture Config Override
 # This maps our 1.12B config to MaxText's names
-model_name: "tinymath-1b"
+base_config: "base.yml"
+model_name: "default"
 
 base_emb_dim: 2048
-base_num_heads: 16
+base_num_query_heads: 16
 base_num_kv_heads: 4
 base_mlp_dim: 5632
 base_num_decoder_layers: 22
 head_dim: 128
 vocab_size: 32000
 attention: "dot_product"
-normalization_layer: "rms"
 
 # Sequence length
 max_target_length: 4096
 
 # Data loading
-dataset_path: "gs://tinymath-reason-data-himanshu/pretraining-data"
-dataset_type: "jsonl"
+hf_path: "gs://tinymath-reason-data-himanshu/pretraining-data"
+dataset_type: "hf"
 tokenizer_path: "gs://tinymath-reason-data-himanshu/tokenizer/tokenizer.tiktoken"
 
 # Optimization
 learning_rate: 0.0003
-warmup_steps: 2000
-cosine_learning_rate_final_fraction: 0.1
+warmup_steps_fraction: 0.0066666
+learning_rate_final_fraction: 0.1
 opt_type: "adamw"
 adam_b1: 0.9
 adam_b2: 0.95
@@ -38,7 +38,7 @@ per_device_batch_size: 8   # Will yield 8 * 32 * 4096 = 1,048,576 tokens per ste
 steps: 300000              # Total steps (~314B tokens)
 
 # Checkpointing (save frequently to GCS due to Spot VM preemptions)
-save_period: 500
+checkpoint_period: 500
 async_checkpointing: True
 base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
 run_name: "tinymath-1b-run1-spot"
@@ -49,6 +49,6 @@ compile_topology: "v4-64"  # Ensure it compiles for our specific topology
 compile_topology_num_slices: 1
 
 # Logging
-enable_wandb: True
-wandb_project: "tinymath-1b-pretrain"
+enable_tensorboard: True
+metrics_dir: "gs://tinymath-reason-data-himanshu/metrics"
 log_period: 100
