@@ -18,13 +18,17 @@ pip install --upgrade packaging hatchling hatch-requirements-txt editables
 pip install -e . --no-build-isolation
 
 # 4. Install missing runtime dependencies
-pip install omegaconf 'protobuf<5.0.0' pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax
+echo "Upgrading JAX to JAX-nightly TPU release..."
+pip install -U --pre jax jaxlib libtpu-nightly requests -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+pip install omegaconf 'protobuf<5.0.0' pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu
 
 # 5. Force upgrade Flax from GitHub for bleeding-edge nnx
 pip install --upgrade --force-reinstall git+https://github.com/google/flax.git
 
-# 6. Backwards compatibility patch for Pytree -> Object
+# 6. Backwards compatibility patch for Pytree -> Object and reshard -> jax.reshard
 find src/ -name "*.py" -exec sed -i 's/from flax.nnx import Pytree/from flax.nnx import Object as Pytree/g' {} +
+sed -i 's/, reshard//g' src/maxtext/utils/sharding.py
+sed -i '1i from jax import reshard' src/maxtext/utils/sharding.py
 
 # 7. Inject mocks for internal Google modules (pathwaysutils, qwix)
 cat << 'EOF' > mock_injector.py
@@ -39,6 +43,8 @@ sys.modules["pathwaysutils.elastic.manager"] = MagicMock()
 # Mock qwix (quantization not used for bfloat16 pretraining)
 sys.modules["qwix"] = MagicMock()
 sys.modules["qwix.pallas"] = MagicMock()
+sys.modules["qwix._src"] = MagicMock()
+sys.modules["qwix._src.core"] = MagicMock()
 EOF
 
 # Inject the mock loader at the top of train.py if not already injected
