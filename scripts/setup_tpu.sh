@@ -22,7 +22,7 @@ pip install --upgrade packaging hatchling hatch-requirements-txt editables
 pip install -e . --no-build-isolation
 
 # 4. Install missing runtime dependencies
-pip install omegaconf 'protobuf<5.0.0' pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement
+pip install omegaconf 'protobuf<5.0.0' pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement cloud_tpu_diagnostics
 echo "Upgrading JAX to JAX-nightly TPU release..."
 pip install -U --pre jax jaxlib libtpu-nightly requests -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
@@ -97,6 +97,9 @@ sys.modules["tokamax._src.ops"] = MagicMock()
 sys.modules["tokamax._src.ops.experimental"] = MagicMock()
 sys.modules["tokamax._src.ops.experimental.tpu"] = MagicMock()
 sys.modules["tokamax._src.ops.experimental.tpu.splash_attention"] = MagicMock()
+
+# Mock drjax (internal Google disaster recovery module)
+sys.modules["drjax"] = MagicMock()
 EOF
 
 # Inject the mock loader at the top of train.py if not already injected
@@ -107,4 +110,4 @@ fi
 
 # 8. Start the training run (SMOKE TEST)
 echo "Starting MaxText Pretraining (SMOKE TEST)..."
-PYTHONPATH=src python3 src/maxtext/trainers/pre_train/train.py MaxText/configs/tinymath_1b.yml run_name=tinymath-1b-smoke steps=100
+PYTHONPATH=src python3 src/maxtext/trainers/pre_train/train.py maxtext_config.yml run_name=tinymath-1b-smoke steps=100
