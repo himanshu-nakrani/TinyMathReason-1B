@@ -22,7 +22,8 @@ pip install --upgrade packaging hatchling hatch-requirements-txt editables
 pip install -e . --no-build-isolation
 
 # 4. Install missing runtime dependencies
-pip install omegaconf 'protobuf<5.0.0' pydantic jaxtyping grain-nightly safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement cloud_tpu_diagnostics ml-collections
+pip uninstall -y grain grain-nightly
+pip install omegaconf protobuf pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu tensorflow-datasets transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement cloud_tpu_diagnostics ml-collections
 echo "Purging conflicting JAX and TPU nightly builds..."
 pip uninstall -y jax jaxlib libtpu libtpu-nightly
 echo "Installing stable JAX with TPU support..."
@@ -120,6 +121,15 @@ sys.modules["tokamax._src.ops.experimental.tpu.splash_attention"] = MagicMock()
 
 # Mock drjax (internal Google disaster recovery module)
 sys.modules["drjax"] = MagicMock()
+
+# Mock missing experimental grain features in stable grain
+import grain
+if not hasattr(grain, "experimental"):
+    sys.modules["grain.experimental"] = MagicMock()
+    import grain.experimental
+if not hasattr(grain.experimental, "BestFitPackIterDataset"):
+    grain.experimental.BestFitPackIterDataset = MagicMock()
+    grain.experimental.pick_performance_config = MagicMock()
 EOF
 
 # Inject the mock loader at the top of train.py if not already injected
