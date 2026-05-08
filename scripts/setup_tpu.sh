@@ -23,7 +23,7 @@ pip install -e . --no-build-isolation
 
 # 4. Install missing runtime dependencies
 pip uninstall -y grain grain-nightly
-pip install omegaconf protobuf pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu tensorflow-datasets transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement cloud_tpu_diagnostics ml-collections
+pip install omegaconf protobuf pydantic jaxtyping grain safetensors huggingface-hub aqtp google-cloud-storage absl-py optax tensorflow-cpu tensorflow-datasets datasets gcsfs transformers tokenizers tiktoken sentencepiece sympy Pillow ml_goodput_measurement cloud_tpu_diagnostics ml-collections
 echo "Purging conflicting JAX and TPU nightly builds..."
 pip uninstall -y jax jaxlib libtpu libtpu-nightly
 echo "Installing stable JAX with TPU support..."
@@ -130,6 +130,24 @@ if not hasattr(grain, "experimental"):
 if not hasattr(grain.experimental, "BestFitPackIterDataset"):
     grain.experimental.BestFitPackIterDataset = MagicMock()
     grain.experimental.pick_performance_config = MagicMock()
+
+# Patch HuggingFace datasets to load GCS directories correctly
+try:
+    import datasets
+    _orig_load_dataset = datasets.load_dataset
+    def _patched_load_dataset(path, *args, **kwargs):
+        if isinstance(path, str) and path.startswith("gs://"):
+            return _orig_load_dataset("parquet", data_dir=path, *args, **kwargs)
+        return _orig_load_dataset(path, *args, **kwargs)
+    datasets.load_dataset = _patched_load_dataset
+except Exception as e:
+    pass
+
+# Force JAX distributed initialization before MaxText imports anything that might need it
+try:
+    jax.distributed.initialize()
+except Exception as e:
+    pass
 EOF
 
 # Inject the mock loader at the top of train.py if not already injected
