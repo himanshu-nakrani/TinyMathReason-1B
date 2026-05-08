@@ -18,9 +18,10 @@ attention: "dot_product"
 max_target_length: 4096
 
 # Data loading
-hf_path: "gs://tinymath-reason-data-himanshu/pretraining-data"
-dataset_type: "hf"
+dataset_path: "gs://tinymath-reason-data-himanshu/pretraining-data"
+dataset_type: "grain"
 tokenizer_path: "gs://tinymath-reason-data-himanshu/tokenizer/tokenizer.tiktoken"
+tokenizer_type: "tiktoken"
 
 # Optimization
 learning_rate: 0.0003
