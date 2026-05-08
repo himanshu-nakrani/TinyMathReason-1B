@@ -1,0 +1,4 @@
+gcloud compute tpus tpu-vm ssh node-v4-32-spot-uc2b \
+  --zone=us-central2-b \
+  --worker=0 \
+  --command="grep -v 'Permission denied' ~/maxtext/training.log | tail -n 50"

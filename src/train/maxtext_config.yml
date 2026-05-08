@@ -37,14 +37,15 @@ gradient_clipping_threshold: 1.0
 per_device_batch_size: 8   # Will yield 8 * 32 * 4096 = 1,048,576 tokens per step
 steps: 300000              # Total steps (~314B tokens)
 
-# Checkpointing (save every 5000 steps to GCS)
-save_period: 5000
+# Checkpointing (save frequently to GCS due to Spot VM preemptions)
+save_period: 500
+async_checkpointing: True
 base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
-run_name: "tinymath-1b-run1"
+run_name: "tinymath-1b-run1-spot"
 
 # Hardware / Compilation
 dtype: "bfloat16"
-compile_topology: "v4-32"  # Ensure it compiles for our specific topology
+compile_topology: "v4-64"  # Ensure it compiles for our specific topology
 compile_topology_num_slices: 1
 
 # Logging
