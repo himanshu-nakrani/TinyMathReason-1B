@@ -61,7 +61,8 @@ pip install \
     ml_goodput_measurement \
     cloud_tpu_diagnostics \
     ml-collections \
-    tensorboardX
+    tensorboardX \
+    zstandard
 
 # 4. Install stable JAX with TPU support
 echo "Purging conflicting JAX and TPU nightly builds..."
@@ -144,7 +145,7 @@ if getattr(jax, "_is_monkey_patched", False) is False:
             pass
     jax.config.update = _patched_config_update
 
-    # Shim for jax.set_mesh (added in JAX 0.7.1, missing in 0.6.x)
+    # Shim for jax.set_mesh and jax.sharding.set_mesh (added in JAX 0.7.1, missing in 0.6.x)
     if not hasattr(jax, 'set_mesh'):
         import contextlib
         @contextlib.contextmanager
@@ -152,14 +153,33 @@ if getattr(jax, "_is_monkey_patched", False) is False:
             with mesh:
                 yield
         jax.set_mesh = _set_mesh_shim
+        jax.sharding.set_mesh = _set_mesh_shim
 
     jax._is_monkey_patched = True
 
 # ─────────────────────────────────────────────────────────────
 # Mock internal Google-only modules
 # ─────────────────────────────────────────────────────────────
+# pathwaysutils needs MagicMock for arbitrary attrs (e.g. .initialize())
+# BUT exception classes must be real (used in except clauses)
+# AND Manager must be a real class (used as type annotation)
+class _ScaleUpSignalError(Exception): pass
+class _ScaleDownSignalError(Exception): pass
+class _Manager:
+    def __init__(self, *args, **kwargs): pass
+
+_pw_mod = MagicMock()
+_pw_manager = MagicMock()
+_pw_manager.ScaleUpSignalError = _ScaleUpSignalError
+_pw_manager.ScaleDownSignalError = _ScaleDownSignalError
+_pw_manager.Manager = _Manager
+_pw_mod.elastic.manager = _pw_manager
+
+sys.modules["pathwaysutils"] = _pw_mod
+sys.modules["pathwaysutils.elastic"] = _pw_mod.elastic
+sys.modules["pathwaysutils.elastic.manager"] = _pw_manager
+
 for mod in [
-    "pathwaysutils", "pathwaysutils.elastic", "pathwaysutils.elastic.manager",
     "qwix", "qwix.pallas", "qwix._src", "qwix._src.core",
     "qwix.contrib", "qwix.contrib.sparsity",
     "tokamax", "tokamax._src", "tokamax._src.ops",
@@ -168,6 +188,23 @@ for mod in [
     "drjax",
 ]:
     sys.modules[mod] = MagicMock()
+
+# ─────────────────────────────────────────────────────────────
+# HuggingFace AutoTokenizer Mock (for GCS tiktoken bypass)
+# ─────────────────────────────────────────────────────────────
+import transformers
+_orig_from_pretrained = transformers.AutoTokenizer.from_pretrained
+def _mock_from_pretrained(pretrained_model_name_or_path, *args, **kwargs):
+    if "gs://" in str(pretrained_model_name_or_path) or "tiktoken" in str(pretrained_model_name_or_path):
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.pad_token_id = 0
+        mock_tokenizer.unk_token_id = 0
+        mock_tokenizer.bos_token_id = 1
+        mock_tokenizer.eos_token_id = 2
+        mock_tokenizer.vocab_size = 32768
+        return mock_tokenizer
+    return _orig_from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+transformers.AutoTokenizer.from_pretrained = _mock_from_pretrained
 
 # ─────────────────────────────────────────────────────────────
 # Grain compatibility patches
@@ -208,20 +245,26 @@ try:
 except Exception:
     pass
 MOCK_EOF
-
 # 9. Inject the mock loader at the top of train.py if not already injected
 if ! grep -q "Mock internal Google-only modules" src/maxtext/trainers/pre_train/train.py; then
     cat mock_injector.py src/maxtext/trainers/pre_train/train.py > temp.py
     mv temp.py src/maxtext/trainers/pre_train/train.py
 fi
 
-# 10. Start the training run (SMOKE TEST)
+# 10. Start the training run (PRODUCTION)
 echo "=============================================="
-echo "Starting MaxText Pretraining (SMOKE TEST)..."
-echo "  dataset_type: synthetic"
-echo "  steps: 100"
+echo "Starting MaxText Pretraining (PRODUCTION)..."
+echo "  run_name: tinymath-1b-prod-run1"
+echo "  dataset: HF pre-tokenized jsonl.zst"
 echo "=============================================="
-PYTHONPATH=src python3 src/maxtext/trainers/pre_train/train.py \
-    maxtext_config.yml \
-    run_name=tinymath-1b-smoke \
-    steps=100
+
+# Use a while loop to auto-restart the script in case of transient software crashes.
+# (If the TPU is preempted by GCP, the entire VM will shut down, and you will
+# need to recreate the TPU and re-run this script to resume from the latest checkpoint).
+while true; do
+    PYTHONPATH=src python3 src/maxtext/trainers/pre_train/train.py \
+        maxtext_config.yml
+
+    echo "Training script exited. Restarting in 10 seconds to resume from latest checkpoint..."
+    sleep 10
+done
