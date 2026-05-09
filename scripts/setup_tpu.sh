@@ -240,10 +240,12 @@ if not hasattr(grain_python, "PyGrainCheckpointHandler"):
 # JAX distributed initialization
 # Must happen before any Orbax checkpoint manager is created
 # ─────────────────────────────────────────────────────────────
-try:
-    jax.distributed.initialize()
-except Exception:
-    pass
+import multiprocessing
+if multiprocessing.current_process().name == 'MainProcess':
+    try:
+        jax.distributed.initialize()
+    except Exception:
+        pass
 MOCK_EOF
 # 9. Inject the mock loader at the top of train.py if not already injected
 if ! grep -q "Mock internal Google-only modules" src/maxtext/trainers/pre_train/train.py; then
@@ -258,6 +260,13 @@ echo "  run_name: tinymath-1b-prod-run1"
 echo "  dataset: HF pre-tokenized jsonl.zst"
 echo "=============================================="
 
-PYTHONPATH=src python3 src/maxtext/trainers/pre_train/train.py \
-    maxtext_config.yml
+# Use a while loop to auto-restart the script in case of transient software crashes.
+# (If the TPU is preempted by GCP, the entire VM will shut down, and you will
+# need to recreate the TPU and re-run this script to resume from the latest checkpoint).
+while true; do
+    PYTHONPATH=src TF_CPP_MIN_LOG_LEVEL=0 python3 -u src/maxtext/trainers/pre_train/train.py \
+        maxtext_config.yml
 
+    echo "Training script exited. Restarting in 10 seconds to resume from latest checkpoint..."
+    sleep 10
+done

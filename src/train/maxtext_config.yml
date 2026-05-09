@@ -44,10 +44,10 @@ gradient_clipping_threshold: 1.0
 
 # Batching & Scale
 per_device_batch_size: 8   # Yields 8 * 32 * 4096 = 1,048,576 tokens per step
-steps: 10                  # 10 step test run
+steps: 54363               # ~57B tokens total
 
 # Checkpointing (save to GCS)
-checkpoint_period: 10      # Save every ~500 steps (few hours)
+checkpoint_period: 100     # Save every 100 steps
 async_checkpointing: True
 base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
 run_name: "tinymath-1b-prod-run1"
