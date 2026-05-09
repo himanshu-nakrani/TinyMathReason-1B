@@ -15,7 +15,7 @@ set -e  # Exit on first error
 # 1. Clone MaxText if it doesn't exist
 if [ ! -d "$HOME/maxtext" ]; then
     echo "Cloning MaxText..."
-    git clone https://github.com/google/maxtext.git $HOME/maxtext
+    git clone https://github.com/AI-Hypercomputer/maxtext.git $HOME/maxtext
 fi
 
 # Copy the config file into the maxtext directory
@@ -26,37 +26,54 @@ fi
 cd $HOME/maxtext
 
 # Clean repository files to prevent duplicate injections on multiple runs
-git checkout -- src/maxtext/trainers/pre_train/train.py
-git checkout -- src/maxtext/utils/sharding.py
+git checkout -- src/maxtext/trainers/pre_train/train.py 2>/dev/null || true
+git checkout -- src/maxtext/utils/sharding.py 2>/dev/null || true
 
-# 2. Patch Python version requirement (TPU VM ships 3.10, MaxText wants 3.12)
-sed -i 's/>=3.12/>=3.10/g' pyproject.toml
+# 3. Install only the runtime dependencies needed for training
+# (Skip `pip install -e .` — it pulls in MaxText's full dev tree and takes 30+ min to resolve.
+#  We use PYTHONPATH=src instead to make MaxText importable.)
+echo "Installing runtime dependencies..."
+pip install --upgrade pip
+pip install \
+    flax==0.10.5 \
+    orbax-checkpoint \
+    optax \
+    grain-nightly \
+    omegaconf \
+    protobuf \
+    pydantic \
+    jaxtyping \
+    safetensors \
+    huggingface-hub \
+    aqtp \
+    google-cloud-storage \
+    absl-py \
+    tensorflow-cpu \
+    tensorflow-datasets \
+    datasets \
+    gcsfs \
+    transformers \
+    tokenizers \
+    tiktoken \
+    sentencepiece \
+    sympy \
+    Pillow \
+    ml_goodput_measurement \
+    cloud_tpu_diagnostics \
+    ml-collections \
+    tensorboardX
 
-# 3. Install core dependencies bypassing hatchling isolation
-echo "Installing dependencies..."
-pip install --upgrade packaging hatchling hatch-requirements-txt editables
-pip install -e . --no-build-isolation
-
-# 4. Install missing runtime dependencies
-# Use grain-nightly for BestFitPackIterDataset + MapTransform support
-pip uninstall -y grain grain-nightly 2>/dev/null || true
-pip install omegaconf protobuf pydantic jaxtyping grain-nightly \
-    safetensors huggingface-hub aqtp google-cloud-storage absl-py optax \
-    tensorflow-cpu tensorflow-datasets datasets gcsfs \
-    transformers tokenizers tiktoken sentencepiece sympy Pillow \
-    ml_goodput_measurement cloud_tpu_diagnostics ml-collections
-
-# 5. Install stable JAX with TPU support
+# 4. Install stable JAX with TPU support
 echo "Purging conflicting JAX and TPU nightly builds..."
 pip uninstall -y jax jaxlib libtpu libtpu-nightly 2>/dev/null || true
 echo "Installing stable JAX with TPU support..."
 pip install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 
-# 6. Force upgrade Flax from GitHub for bleeding-edge nnx
-pip install --upgrade --force-reinstall git+https://github.com/google/flax.git
-
 # 7. Backwards compatibility patch for Pytree -> Object and reshard
 find src/ -name "*.py" -exec sed -i 's/from flax.nnx import Pytree/from flax.nnx import Object as Pytree/g' {} +
+
+# Patch Flax 0.11+ API: .get_value() -> .value (Flax 0.10.5 uses .value property)
+find src/ -name "*.py" -exec sed -i 's/\.get_value()/.value/g' {} +
 
 cat << 'EOF' > patch_sharding.py
 import re
@@ -132,7 +149,6 @@ if getattr(jax, "_is_monkey_patched", False) is False:
         import contextlib
         @contextlib.contextmanager
         def _set_mesh_shim(mesh):
-            # In JAX 0.6.x, Mesh objects are already context managers
             with mesh:
                 yield
         jax.set_mesh = _set_mesh_shim
