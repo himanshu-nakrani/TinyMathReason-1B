@@ -47,7 +47,7 @@ per_device_batch_size: 8   # Yields 8 * 32 * 4096 = 1,048,576 tokens per step
 steps: 54363               # ~57B tokens total
 
 # Checkpointing (save to GCS)
-checkpoint_period: 100     # Save every 100 steps
+checkpoint_period: 1000    # Save every 1000 steps
 async_checkpointing: True
 base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
 run_name: "tinymath-1b-prod-run1"
