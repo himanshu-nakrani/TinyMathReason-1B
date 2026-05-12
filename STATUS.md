@@ -2,7 +2,7 @@
 
 This document tracks our progress through the accelerated Execution Plan.
 
-**Last Updated:** 2026-05-12
+**Last Updated:** 2026-05-13
 
 ## Phase 1: Setup & Data Prep (Days 1-5) ✅
 - [x] Project setup complete (Repo structured, `venv` created, dependencies installed).
@@ -24,7 +24,11 @@ This document tracks our progress through the accelerated Execution Plan.
   - Optimizer: AdamW (lr=3e-4, cosine decay, β1=0.9, β2=0.95)
   - Batch size: 256 sequences × 4096 tokens = ~1M tokens/step
   - Checkpoint interval: every 1,000 steps (12 checkpoints saved)
-- [ ] Convert Orbax checkpoint to HuggingFace Safetensors (`src/train/convert_checkpoint.py`).
+- [x] Rewrite `convert_checkpoint.py` — fixed 5 critical bugs (vocab_size, stacked layers, query scaling, RoPE permutation, tokenizer).
+- [x] Create `inspect_checkpoint.py` — utility to dump PyTree structure before conversion.
+- [x] Fix `tokenizer/tokenizer_config.json` — invalid class name → `PreTrainedTokenizerFast`.
+- [ ] **NEXT →** Run `inspect_checkpoint.py` on GCS checkpoint to verify PyTree structure.
+- [ ] Run `convert_checkpoint.py` to produce HuggingFace safetensors model.
 
 ## Phase 3: Post-Training SFT (Days 16-17)
 - [ ] Provision GPU instance (AMD MI300X or equivalent).
@@ -51,7 +55,8 @@ This document tracks our progress through the accelerated Execution Plan.
 |---|---|
 | `scripts/setup_tpu.sh` | TPU setup + training launch (MaxText + JAX compat patches) |
 | `src/train/maxtext_config.yml` | MaxText training config |
-| `src/train/convert_checkpoint.py` | Orbax → HuggingFace conversion |
+| `src/train/convert_checkpoint.py` | Orbax → HuggingFace conversion (rewritten) |
+| `src/train/inspect_checkpoint.py` | Dump Orbax checkpoint PyTree structure |
 | `src/model/modeling_tinymath.py` | PyTorch model definition (1.07B LLaMA-style) |
 | `src/eval/run_benchmarks.py` | lm-evaluation-harness wrapper |
 | `src/sft/train_sft.py` | SFT training with TRL |
