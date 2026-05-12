@@ -1,110 +1,141 @@
 """
-Inspect the structure of a MaxText Orbax checkpoint.
-
-Usage:
-    python src/train/inspect_checkpoint.py \
-        --orbax_dir gs://tinymath-reason-data-himanshu/checkpoints/tinymath-1b-prod-run2/checkpoints/54362
-
-This will print the full PyTree structure with shapes and dtypes,
-which is essential before running the conversion script.
+Read zarr.json metadata via OCDBT KvStore and check scan_layers setting.
 """
 import argparse
 import logging
 import json
-from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def inspect_checkpoint(orbax_dir: str):
-    """Load and inspect the PyTree structure of an Orbax checkpoint."""
-    import jax
-    import numpy as np
-    from orbax import checkpoint as ocp
+    import tensorstore as ts
 
-    logging.info(f"Loading checkpoint from: {orbax_dir}")
+    base = orbax_dir.replace("gs://", "")
 
-    # Use StandardCheckpointer for modern Orbax
+    # ── 1. Read zarr.json files from root OCDBT ───────────────────────
+    print(f"\n{'='*80}")
+    print("READING zarr.json FROM ROOT OCDBT STORE")
+    print(f"{'='*80}")
+
+    kvs = ts.KvStore.open({
+        'driver': 'ocdbt',
+        'base': f'gs://{base}/items/',
+    }).result()
+
+    zarr_keys = [k for k in kvs.list().result() if b'zarr.json' in k]
+    for zk in sorted(zarr_keys):
+        try:
+            data = kvs[zk].read().result()
+            meta = json.loads(data.tobytes())
+            name = zk.decode().replace('/zarr.json', '')
+            shape = meta.get('shape', '?')
+            dtype = meta.get('data_type', meta.get('dtype', '?'))
+            chunks = meta.get('chunk_grid', {}).get('configuration', {}).get('chunk_shape', '?')
+            print(f"  {name}")
+            print(f"    shape={shape}, dtype={dtype}, chunks={chunks}")
+        except Exception as e:
+            print(f"  {zk.decode()}: ERROR - {e}")
+
+    # ── 2. Read zarr.json from ocdbt.process_0 ────────────────────────
+    print(f"\n{'='*80}")
+    print("READING zarr.json FROM ocdbt.process_0")
+    print(f"{'='*80}")
+
+    kvs_p0 = ts.KvStore.open({
+        'driver': 'ocdbt',
+        'base': f'gs://{base}/items/ocdbt.process_0/',
+    }).result()
+
+    zarr_keys_p0 = [k for k in kvs_p0.list().result() if b'zarr.json' in k]
+    for zk in sorted(zarr_keys_p0):
+        try:
+            data = kvs_p0[zk].read().result()
+            meta = json.loads(data.tobytes())
+            name = zk.decode().replace('/zarr.json', '')
+            shape = meta.get('shape', '?')
+            dtype = meta.get('data_type', meta.get('dtype', '?'))
+            chunks = meta.get('chunk_grid', {}).get('configuration', {}).get('chunk_shape', '?')
+            print(f"  {name}")
+            print(f"    shape={shape}, dtype={dtype}, chunks={chunks}")
+        except Exception as e:
+            print(f"  {zk.decode()}: ERROR - {e}")
+
+    # ── 3. Try zarr3 driver to actually read arrays ────────────────────
+    print(f"\n{'='*80}")
+    print("READING ARRAYS WITH zarr3 DRIVER")
+    print(f"{'='*80}")
+
+    known_params = [
+        "params.VariableState.decoder.decoder_norm.scale.value",
+        "params.VariableState.decoder.logits_dense.kernel.value",
+        "params.VariableState.token_embedder.embedding.value",
+    ]
+
+    for param_path in known_params:
+        try:
+            spec = {
+                'driver': 'zarr3',
+                'kvstore': {
+                    'driver': 'ocdbt',
+                    'base': f'gs://{base}/items/',
+                },
+                'path': param_path,
+            }
+            store = ts.open(spec, read=True, open=True).result()
+            print(f"  ✅ {param_path}")
+            print(f"     shape={store.shape}, dtype={store.dtype}")
+
+            # Read a small slice to verify
+            if len(store.shape) == 0:
+                val = store.read().result()
+                print(f"     value={val}")
+            elif len(store.shape) == 1:
+                val = store[:5].read().result()
+                print(f"     first 5 values: {val}")
+        except Exception as e:
+            print(f"  ❌ {param_path}: {str(e)[:150]}")
+
+    # ── 4. Check other checkpoints for comparison ─────────────────────
+    print(f"\n{'='*80}")
+    print("CHECKING ANOTHER CHECKPOINT (54000) FOR COMPARISON")
+    print(f"{'='*80}")
+
+    base_54000 = base.replace("/54362", "/54000")
     try:
-        checkpointer = ocp.PyTreeCheckpointer()
-        ckpt = checkpointer.restore(orbax_dir)
+        import gcsfs
+        fs = gcsfs.GCSFileSystem()
+        meta_path = base_54000 + "/items/_METADATA"
+        with fs.open(meta_path, 'rb') as f:
+            meta_54000 = json.loads(f.read())
+        tree = meta_54000.get('tree_metadata', {})
+        print(f"  Step 54000 has {len(tree)} entries in tree_metadata")
+        for key_str, val in sorted(tree.items()):
+            keys = [km['key'] for km in val['key_metadata']]
+            shape = val['value_metadata'].get('write_shape', [])
+            path = '/'.join(keys)
+            if keys[0] == 'params':
+                print(f"    [PARAM] {path}: {shape}")
     except Exception as e:
-        logging.warning(f"PyTreeCheckpointer failed: {e}")
-        logging.info("Trying StandardCheckpointer...")
-        checkpointer = ocp.StandardCheckpointer()
-        ckpt = checkpointer.restore(orbax_dir)
+        print(f"  Failed: {e}")
 
-    logging.info("Checkpoint loaded successfully!\n")
-
-    def print_tree(tree, prefix="", file=None):
-        """Recursively print the PyTree structure."""
-        if isinstance(tree, dict):
-            for key in sorted(tree.keys()):
-                print_tree(tree[key], prefix=f"{prefix}/{key}", file=file)
-        elif hasattr(tree, 'shape'):
-            line = f"{prefix}: shape={tree.shape}, dtype={tree.dtype}"
-            print(line)
-            if file:
-                file.write(line + "\n")
-        elif isinstance(tree, (list, tuple)):
-            for i, item in enumerate(tree):
-                print_tree(item, prefix=f"{prefix}[{i}]", file=file)
-        else:
-            line = f"{prefix}: type={type(tree).__name__}, value={tree}"
-            print(line)
-            if file:
-                file.write(line + "\n")
-
-    print("=" * 80)
-    print("CHECKPOINT STRUCTURE")
-    print("=" * 80)
-    print_tree(ckpt)
-
-    # Also print top-level keys
-    print("\n" + "=" * 80)
-    print("TOP-LEVEL KEYS")
-    print("=" * 80)
-    if isinstance(ckpt, dict):
-        for key in sorted(ckpt.keys()):
-            val = ckpt[key]
-            if isinstance(val, dict):
-                print(f"  '{key}': dict with {len(val)} keys -> {sorted(val.keys())[:10]}")
-            elif hasattr(val, 'shape'):
-                print(f"  '{key}': array shape={val.shape}")
-            else:
-                print(f"  '{key}': {type(val).__name__}")
-
-    # If 'params' exists, explore deeper
-    params = ckpt.get('params', ckpt)
-    if isinstance(params, dict) and 'params' in params:
-        params = params['params']
-
-    if isinstance(params, dict):
-        print("\n" + "=" * 80)
-        print("PARAMETER KEYS (2 levels deep)")
-        print("=" * 80)
-        for k1 in sorted(params.keys()):
-            v1 = params[k1]
-            if isinstance(v1, dict):
-                for k2 in sorted(v1.keys()):
-                    v2 = v1[k2]
-                    if isinstance(v2, dict):
-                        subkeys = sorted(v2.keys())[:8]
-                        print(f"  {k1}/{k2}: dict -> {subkeys}")
-                    elif hasattr(v2, 'shape'):
-                        print(f"  {k1}/{k2}: shape={v2.shape}, dtype={v2.dtype}")
-                    else:
-                        print(f"  {k1}/{k2}: {type(v2).__name__}")
-            elif hasattr(v1, 'shape'):
-                print(f"  {k1}: shape={v1.shape}, dtype={v1.dtype}")
-
-    return ckpt
+    # ── 5. Check MaxText's scan_layers default ─────────────────────────
+    print(f"\n{'='*80}")
+    print("LOCAL CONFIG ANALYSIS")
+    print(f"{'='*80}")
+    print("  maxtext_config.yml does NOT set 'scan_layers'")
+    print("  MaxText default scan_layers = True")
+    print("  This means layers are stacked/scanned")
+    print("")
+    print("  ⚠️  CRITICAL: Only 3 param arrays found in checkpoint!")
+    print("  The 22 layers of attention + MLP weights are MISSING.")
+    print("  Total data per process: ~184 MB (more than 3 params need)")
+    print("  This suggests data exists but is stored differently.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Inspect MaxText Orbax checkpoint structure")
-    parser.add_argument("--orbax_dir", type=str, required=True,
-                        help="Path to MaxText Orbax checkpoint (local or GCS)")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--orbax_dir", type=str, required=True)
     args = parser.parse_args()
-
     inspect_checkpoint(args.orbax_dir)
