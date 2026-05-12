@@ -12,11 +12,10 @@
 
 set -e  # Exit on first error
 
-# 1. Clone MaxText if it doesn't exist
-if [ ! -d "$HOME/maxtext" ]; then
-    echo "Cloning MaxText..."
-    git clone https://github.com/AI-Hypercomputer/maxtext.git $HOME/maxtext
-fi
+# 1. Clone MaxText (always fresh to ensure pinned version)
+echo "Setting up MaxText..."
+rm -rf $HOME/maxtext
+git clone https://github.com/AI-Hypercomputer/maxtext.git $HOME/maxtext
 
 # Copy the config file into the maxtext directory
 if [ -f "$HOME/maxtext_config.yml" ]; then
@@ -76,6 +75,8 @@ find src/ -name "*.py" -exec sed -i 's/from flax.nnx import Pytree/from flax.nnx
 # Patch Flax 0.11+ API: .get_value() -> .value (Flax 0.10.5 uses .value property)
 find src/ -name "*.py" -exec sed -i 's/\.get_value()/.value/g' {} +
 
+
+
 cat << 'EOF' > patch_sharding.py
 import re
 file_path = "src/maxtext/utils/sharding.py"
@@ -122,6 +123,55 @@ except Exception:
 
 import jax
 from unittest.mock import MagicMock
+
+# ─────────────────────────────────────────────────────────────
+# Pallas compatibility shim (pallas moved between JAX versions)
+# We don't use Pallas GPU kernels for TPU training, so mock it.
+# Uses a meta_path finder to intercept ALL pallas imports.
+# ─────────────────────────────────────────────────────────────
+import types
+import importlib.abc
+import importlib.machinery
+
+class _PallasMockFinder(importlib.abc.MetaPathFinder):
+    """Intercepts any import of jax.pallas.* or jax.experimental.pallas.*"""
+    _PREFIXES = ('jax.pallas', 'jax.experimental.pallas')
+
+    def find_module(self, fullname, path=None):
+        for prefix in self._PREFIXES:
+            if fullname == prefix or fullname.startswith(prefix + '.'):
+                return self
+        return None
+
+    def load_module(self, fullname):
+        if fullname in sys.modules:
+            return sys.modules[fullname]
+        # Create a module that acts as a package and returns MagicMock for attrs
+        mod = types.ModuleType(fullname)
+        mod.__path__ = []
+        mod.__file__ = '<pallas_mock>'
+        mod.__loader__ = self
+        mod.__package__ = fullname
+        # Make attribute access return MagicMock for any unknown attr
+        _real_mod_class = type('PallasMock', (types.ModuleType,), {
+            '__getattr__': lambda self, name: MagicMock()
+        })
+        mock = _real_mod_class(fullname)
+        mock.__path__ = []
+        mock.__file__ = '<pallas_mock>'
+        mock.__loader__ = self
+        mock.__package__ = fullname
+        sys.modules[fullname] = mock
+        return mock
+
+# Install the finder BEFORE any MaxText imports
+sys.meta_path.insert(0, _PallasMockFinder())
+
+# Set attributes on jax so direct attribute access works too
+if not hasattr(jax, 'pallas'):
+    jax.pallas = sys.modules.get('jax.pallas') or _PallasMockFinder().load_module('jax.pallas')
+if not hasattr(jax.experimental, 'pallas'):
+    jax.experimental.pallas = sys.modules.get('jax.experimental.pallas') or _PallasMockFinder().load_module('jax.experimental.pallas')
 
 # ─────────────────────────────────────────────────────────────
 # JAX compatibility patches
