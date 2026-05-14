@@ -7,21 +7,8 @@
 # Architecture Config Override
 # This maps our 1.12B config to MaxText's names
 base_config: "base.yml"
-model_name: "default"
-
-base_emb_dim: 2048
-base_num_query_heads: 16
-base_num_kv_heads: 4
-base_mlp_dim: 5632
-base_num_decoder_layers: 22
-num_decoder_layers: 22
-scan_layers: True
-head_dim: 128
-vocab_size: 32768  # power of 2 for clean FSDP sharding
-attention: "dot_product"
-
-# Sequence length
-max_target_length: 4096
+model_name: "tinymath-1b"
+override_model_config: True
 
 # Data loading — PRODUCTION uses pre-tokenized HF dataset
 dataset_type: "hf"
@@ -52,7 +39,7 @@ steps: 54363               # ~57B tokens total
 checkpoint_period: 1000    # Save every 1000 steps
 async_checkpointing: True
 base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
-run_name: "tinymath-1b-prod-run3"
+run_name: "tinymath-1b-prod-run5"
 
 # Hardware / Compilation
 dtype: "bfloat16"
