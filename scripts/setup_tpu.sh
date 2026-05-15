@@ -24,6 +24,15 @@ fi
 
 cd $HOME/maxtext
 
+# 2. Deploy custom architecture
+if [ -f "$HOME/tinymath-1b.yml" ]; then
+    mkdir -p src/maxtext/configs/models/
+    cp "$HOME/tinymath-1b.yml" src/maxtext/configs/models/
+fi
+
+# Patch types.py to allow tinymath-1b
+sed -i 's/ModelName = Literal\[/ModelName = Literal["tinymath-1b", /' src/maxtext/configs/types.py
+
 # Clean repository files to prevent duplicate injections on multiple runs
 git checkout -- src/maxtext/trainers/pre_train/train.py 2>/dev/null || true
 git checkout -- src/maxtext/utils/sharding.py 2>/dev/null || true

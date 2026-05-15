@@ -1,16 +1,13 @@
 # TinyMathReason-1B Pretraining Configuration for MaxText
 # ======================================================
-# SMOKE TEST: Uses synthetic data to validate TPU hardware,
-# distributed sharding, XLA compilation, and checkpointing.
-# Switch dataset_type to "hf" for real training (see below).
 
 # Architecture Config Override
-# This maps our 1.12B config to MaxText's names
 base_config: "base.yml"
 model_name: "tinymath-1b"
 override_model_config: True
+pure_nnx_decoder: False
 
-# Data loading — PRODUCTION uses pre-tokenized HF dataset
+# Data loading
 dataset_type: "hf"
 hf_path: "json"
 hf_train_files: "gs://tinymath-reason-data-himanshu/pretraining-data/**/*.jsonl.zst"
@@ -18,7 +15,7 @@ tokenize_train_data: False
 train_data_columns: ['targets']
 tokenizer_path: "gs://tinymath-reason-data-himanshu/tokenizer/tokenizer.tiktoken"
 tokenizer_type: "tiktoken"
-# The vocabulary is 32000, but we use 32768 for padding/sharding compatibility.
+max_target_length: 4096
 
 # Optimization
 learning_rate: 0.0003
@@ -39,16 +36,17 @@ steps: 54363               # ~57B tokens total
 checkpoint_period: 1000    # Save every 1000 steps
 async_checkpointing: True
 base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
-run_name: "tinymath-1b-prod-run5"
+run_name: "tinymath-1b-prod-run7"
 
 # Hardware / Compilation
 dtype: "bfloat16"
 
-# Sharding — relax tolerance for JAX 0.6.2 compatibility
+# Sharding
 sharding_tolerance: 0.30
+scan_layers: False
 
 # Logging & Monitoring
 enable_tensorboard: True
-tensorboard_dir: "gs://tinymath-reason-data-himanshu/tensorboard/tinymath-1b-prod-run1"
-metrics_dir: "gs://tinymath-reason-data-himanshu/metrics/tinymath-1b-prod-run1"
+tensorboard_dir: "gs://tinymath-reason-data-himanshu/tensorboard/tinymath-1b-prod-run7"
+metrics_dir: "gs://tinymath-reason-data-himanshu/metrics/tinymath-1b-prod-run7"
 log_period: 10
