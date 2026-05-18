@@ -36,17 +36,16 @@ steps: 54363               # ~57B tokens total
 checkpoint_period: 1000    # Save every 1000 steps
 async_checkpointing: True
 base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
-run_name: "tinymath-1b-prod-run9"
+run_name: "tinymath-1b-prod-run10"
 
 # Hardware / Compilation
 dtype: "bfloat16"
 
 # Sharding
 sharding_tolerance: 0.30
-scan_layers: True
 
 # Logging & Monitoring
 enable_tensorboard: True
-tensorboard_dir: "gs://tinymath-reason-data-himanshu/tensorboard/tinymath-1b-prod-run7"
-metrics_dir: "gs://tinymath-reason-data-himanshu/metrics/tinymath-1b-prod-run7"
+tensorboard_dir: "gs://tinymath-reason-data-himanshu/tensorboard/tinymath-1b-prod-run10"
+metrics_dir: "gs://tinymath-reason-data-himanshu/metrics/tinymath-1b-prod-run10"
 log_period: 10

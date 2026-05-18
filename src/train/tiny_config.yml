@@ -1,0 +1,42 @@
+base_config: "base.yml"
+model_name: "default"
+override_model_config: True
+pure_nnx_decoder: True
+
+# Tiny architecture
+base_emb_dim: 64
+base_num_query_heads: 4
+base_num_kv_heads: 1
+base_mlp_dim: 128
+base_num_decoder_layers: 2
+num_decoder_layers: 2
+head_dim: 16
+vocab_size: 32768
+attention: "dot_product"
+scan_layers: False
+
+# Data
+dataset_type: "hf"
+hf_path: "json"
+hf_train_files: "gs://tinymath-reason-data-himanshu/pretraining-data/**/*.jsonl.zst"
+tokenize_train_data: False
+train_data_columns: ['targets']
+tokenizer_path: "gs://tinymath-reason-data-himanshu/tokenizer/tokenizer.tiktoken"
+tokenizer_type: "tiktoken"
+max_target_length: 4096
+
+# Opt
+learning_rate: 0.0003
+opt_type: "adamw"
+per_device_batch_size: 1
+steps: 2
+
+# Checkpoint
+checkpoint_period: 1
+async_checkpointing: False
+base_output_directory: "gs://tinymath-reason-data-himanshu/checkpoints"
+run_name: "tinymath-tiny-test"
+
+dtype: "bfloat16"
+sharding_tolerance: 0.30
+enable_tensorboard: False

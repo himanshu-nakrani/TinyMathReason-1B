@@ -34,12 +34,12 @@ logger = logging.getLogger(__name__)
 
 # ── Architecture constants (must match maxtext_config.yml) ──────────────────
 VOCAB_SIZE = 32768          # Padded from 32000 for FSDP alignment
-HIDDEN_SIZE = 2048
-INTERMEDIATE_SIZE = 5632    # SwiGLU
-NUM_HIDDEN_LAYERS = 22
-NUM_ATTENTION_HEADS = 16    # Query heads
-NUM_KV_HEADS = 4            # GQA 4:1
-HEAD_DIM = 128              # HIDDEN_SIZE // NUM_ATTENTION_HEADS
+HIDDEN_SIZE = 64
+INTERMEDIATE_SIZE = 128     # SwiGLU
+NUM_HIDDEN_LAYERS = 2
+NUM_ATTENTION_HEADS = 4     # Query heads
+NUM_KV_HEADS = 1            # GQA 4:1
+HEAD_DIM = 16               # HIDDEN_SIZE // NUM_ATTENTION_HEADS
 MAX_POSITION_EMBEDDINGS = 4096
 RMS_NORM_EPS = 1e-5
 ROPE_THETA = 10000.0
@@ -86,12 +86,9 @@ def unpermute_from_maxtext_rope(arr, num_heads, head_dim):
 
 def navigate_params(ckpt):
     """
-    Navigate to the model parameters in the checkpoint tree.
-
-    MaxText checkpoints can have different nesting depending on whether
-    they're training checkpoints (with optimizer state) or param-only.
-
-    Common structures:
+    MaxText checkpoints have different nesting depending on how they are saved.
+    This safely navigates to the core params dict.
+    Usually:
       - ckpt['params']['params'][...]  (training checkpoint)
       - ckpt['params'][...]            (param-only checkpoint)
       - ckpt[...]                      (raw params)
@@ -102,11 +99,70 @@ def navigate_params(ckpt):
             # Check for double-nesting: training checkpoints have params.params
             if isinstance(inner, dict) and 'params' in inner:
                 logger.info("Checkpoint structure: ckpt['params']['params'][...]")
-                return inner['params']
+                inner = inner['params']
             else:
                 logger.info("Checkpoint structure: ckpt['params'][...]")
-                return inner
-    logger.info("Checkpoint structure: flat (using ckpt directly)")
+                
+        else:
+            logger.info("Checkpoint structure: flat (using ckpt directly)")
+            inner = ckpt
+            
+        if isinstance(inner, dict) and 'VariableState' in inner:
+            logger.info("Unnesting VariableState...")
+            return inner['VariableState']
+        return inner
+    return ckpt
+
+
+def load_orbax_with_tensorstore(orbax_dir):
+    """Bypasses Orbax and loads the checkpoint directly using TensorStore.
+    This avoids Topology mismatch errors when loading TPU checkpoints on CPU.
+    """
+    import tensorstore as ts
+    if not orbax_dir.endswith("items") and not orbax_dir.endswith("items/"):
+        items_dir = orbax_dir.rstrip("/") + "/items"
+    else:
+        items_dir = orbax_dir
+
+    if items_dir.startswith("gs://"):
+        kvstore_spec = {'driver': 'ocdbt', 'base': items_dir}
+    else:
+        kvstore_spec = {'driver': 'ocdbt', 'base': f'file://{items_dir}'}
+
+    logger.info(f"Opening TensorStore KvStore at: {kvstore_spec['base']}")
+    kvs = ts.KvStore.open(kvstore_spec).result()
+    keys = kvs.list().result()
+    
+    ckpt = {}
+    array_count = 0
+    for k in keys:
+        k_str = k.decode()
+        if k_str.endswith("zarr.json") or k_str.endswith(".zarray"):
+            arr_path = k_str.replace("/zarr.json", "").replace("/.zarray", "")
+            if arr_path in ("step",) or "opt_state" in arr_path:
+                continue # Skip optimizer state
+                
+            driver_name = 'zarr3' if k_str.endswith("zarr.json") else 'zarr'
+            dataset = ts.open({
+                'driver': driver_name,
+                'kvstore': kvstore_spec,
+                'path': arr_path
+            }).result()
+            
+            arr = dataset.read().result()
+            parts = arr_path.split('.')
+            current = ckpt
+            for part in parts[:-1]:
+                if part not in current:
+                    current[part] = {}
+                current = current[part]
+            current[parts[-1]] = arr
+            array_count += 1
+            
+    if array_count == 0:
+        raise FileNotFoundError(f"No arrays found at {kvstore_spec['base']}. Please check if the checkpoint step number (e.g., 1 vs 2) and path are correct.")
+        
+    logger.info(f"Loaded {array_count} arrays via TensorStore.")
     return ckpt
 
 
@@ -118,7 +174,7 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
 
     The key insight is that MaxText stores layer parameters in a STACKED format:
       params['decoder']['layers']['self_attention']['query']['kernel']
-    has shape [hidden, num_layers, heads, head_dim] — NOT per-layer keys.
+    has shape [hidden, num_layers, heads, head_dim] - NOT per-layer keys.
     """
     import jax
     import torch
@@ -132,8 +188,12 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
         ckpt = checkpointer.restore(orbax_dir)
     except Exception as e:
         logger.warning(f"PyTreeCheckpointer failed ({e}), trying StandardCheckpointer...")
-        checkpointer = ocp.StandardCheckpointer()
-        ckpt = checkpointer.restore(orbax_dir)
+        try:
+            checkpointer = ocp.StandardCheckpointer()
+            ckpt = checkpointer.restore(orbax_dir)
+        except Exception as e2:
+            logger.warning(f"StandardCheckpointer failed ({e2}). Using TensorStore directly to bypass topology mismatch...")
+            ckpt = load_orbax_with_tensorstore(orbax_dir)
 
     params = navigate_params(ckpt)
     logger.info(f"Top-level param keys: {sorted(params.keys())}")
@@ -145,14 +205,21 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
         f"Expected 'decoder' in params, got: {sorted(params.keys())}"
 
     decoder = params['decoder']
-    logger.info(f"Decoder keys: {sorted(decoder.keys())}")
-
-    # Verify stacked layer structure
-    layers = decoder['layers']
-    logger.info(f"Layers keys: {sorted(layers.keys())}")
+    # Verify layer structure
+    if 'layers' in decoder:
+        layers = decoder['layers']
+    else:
+        # For scan_layers=False, layers_0, layers_1 etc are directly inside decoder
+        layers = decoder
+        
+    logger.info(f"Layers/Decoder keys: {sorted(layers.keys())}")
 
     # Sample a weight to confirm the stacking dimension
-    q_kernel = np.asarray(layers['self_attention']['query']['kernel'])
+    if 'self_attention' in layers:
+        q_kernel = np.asarray(layers['self_attention']['query']['kernel'])
+    else:
+        q_kernel = np.asarray(layers['layers_0']['self_attention']['query']['kernel'])
+        
     logger.info(f"Query kernel shape: {q_kernel.shape}")
     logger.info(f"Expected: [hidden={HIDDEN_SIZE}, num_layers={NUM_HIDDEN_LAYERS}, "
                 f"heads={NUM_ATTENTION_HEADS}, head_dim={HEAD_DIM}]")
@@ -189,7 +256,6 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
     # --- Final LayerNorm ---
     decoder_norm = np.asarray(decoder['decoder_norm']['scale'])
     logger.info(f"  Decoder norm: {decoder_norm.shape}")
-    # May need reshaping if stored as [hidden, 1] or similar
     hf_state_dict["model.norm.weight"] = to_torch(decoder_norm.reshape(HIDDEN_SIZE))
 
     # --- LM Head ---
@@ -197,87 +263,87 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
     logger.info(f"  Logits dense: {logits_kernel.shape} (expected [{HIDDEN_SIZE}, {VOCAB_SIZE}])")
     hf_state_dict["lm_head.weight"] = to_torch(logits_kernel.T)
 
-    # --- Layer-by-layer extraction from stacked arrays ---
-    sa = layers['self_attention']
-    mlp = layers['mlp']
-
-    # Load all stacked kernels once
-    q_kernel = np.asarray(sa['query']['kernel'])
-    k_kernel = np.asarray(sa['key']['kernel'])
-    v_kernel = np.asarray(sa['value']['kernel'])
-    o_kernel = np.asarray(sa['out']['kernel'])
-
-    wi_0_kernel = np.asarray(mlp['wi_0']['kernel'])  # gate_proj
-    wi_1_kernel = np.asarray(mlp['wi_1']['kernel'])  # up_proj
-    wo_kernel = np.asarray(mlp['wo']['kernel'])       # down_proj
-
-    # Determine the norm key name (MaxText uses different names across versions)
-    norm_keys = [k for k in layers.keys() if 'norm' in k.lower() or 'layer_norm' in k.lower()]
-    logger.info(f"  Norm-related keys in layers: {norm_keys}")
-
-    # Try common MaxText norm key names
-    pre_attn_norm_key = None
-    post_attn_norm_key = None
-    for candidate in ['pre_self_attention_layer_norm', 'pre_self_attention_norm']:
-        if candidate in layers:
-            pre_attn_norm_key = candidate
-            break
-    for candidate in ['post_self_attention_layer_norm', 'pre_ffw_norm', 'post_self_attention_norm']:
-        if candidate in layers:
-            post_attn_norm_key = candidate
-            break
-
-    if pre_attn_norm_key is None or post_attn_norm_key is None:
-        logger.error(f"Could not find norm keys! Available: {sorted(layers.keys())}")
-        logger.error("Run inspect_checkpoint.py first to check the exact key names.")
-        raise KeyError(f"Missing norm keys in: {sorted(layers.keys())}")
-
-    pre_attn_norm = np.asarray(layers[pre_attn_norm_key]['scale'])
-    post_attn_norm = np.asarray(layers[post_attn_norm_key]['scale'])
-
-    logger.info(f"  Pre-attention norm key: '{pre_attn_norm_key}', shape: {pre_attn_norm.shape}")
-    logger.info(f"  Post-attention norm key: '{post_attn_norm_key}', shape: {post_attn_norm.shape}")
-    logger.info(f"  Q kernel: {q_kernel.shape}")
-    logger.info(f"  K kernel: {k_kernel.shape}")
-    logger.info(f"  V kernel: {v_kernel.shape}")
-    logger.info(f"  O kernel: {o_kernel.shape}")
-    logger.info(f"  wi_0 (gate): {wi_0_kernel.shape}")
-    logger.info(f"  wi_1 (up): {wi_1_kernel.shape}")
-    logger.info(f"  wo (down): {wo_kernel.shape}")
+    # --- Layer-by-layer extraction ---
+    is_scanned = 'self_attention' in layers
+    logger.info(f"Detected scan_layers={is_scanned}")
+    
+    if is_scanned:
+        sa_global = layers['self_attention']
+        mlp_global = layers['mlp']
+        pre_attn_norm_key = None
+        post_attn_norm_key = None
+        for candidate in ['pre_self_attention_layer_norm', 'pre_self_attention_norm']:
+            if candidate in layers:
+                pre_attn_norm_key = candidate
+                break
+        for candidate in ['post_self_attention_layer_norm', 'pre_ffw_norm', 'post_self_attention_norm']:
+            if candidate in layers:
+                post_attn_norm_key = candidate
+                break
 
     for layer_idx in range(NUM_HIDDEN_LAYERS):
         prefix = f"model.layers.{layer_idx}"
         logger.info(f"  Converting layer {layer_idx}/{NUM_HIDDEN_LAYERS}...")
+        
+        if is_scanned:
+            wq = np.asarray(sa_global['query']['kernel'])[:, layer_idx, :, :]
+            wk = np.asarray(sa_global['key']['kernel'])[:, layer_idx, :, :]
+            wv = np.asarray(sa_global['value']['kernel'])[:, layer_idx, :, :]
+            wo = np.asarray(sa_global['out']['kernel'])[:, layer_idx, :, :]
+            
+            wi_0 = np.asarray(mlp_global['wi_0']['kernel'])[:, layer_idx, :]
+            wi_1 = np.asarray(mlp_global['wi_1']['kernel'])[:, layer_idx, :]
+            wo_mlp = np.asarray(mlp_global['wo']['kernel'])[:, layer_idx, :]
+            
+            pre_attn_norm = np.asarray(layers[pre_attn_norm_key]['scale'])[:, layer_idx]
+            post_attn_norm = np.asarray(layers[post_attn_norm_key]['scale'])[:, layer_idx]
+        else:
+            layer_dict = layers[f'layers_{layer_idx}']
+            sa_local = layer_dict['self_attention']
+            mlp_local = layer_dict['mlp']
+            
+            wq = np.asarray(sa_local['query']['kernel'])
+            wk = np.asarray(sa_local['key']['kernel'])
+            wv = np.asarray(sa_local['value']['kernel'])
+            wo = np.asarray(sa_local['out']['kernel'])
+            
+            wi_0 = np.asarray(mlp_local['wi_0']['kernel'])
+            wi_1 = np.asarray(mlp_local['wi_1']['kernel'])
+            wo_mlp = np.asarray(mlp_local['wo']['kernel'])
+            
+            pre_attn_norm_key = None
+            post_attn_norm_key = None
+            for candidate in ['pre_self_attention_layer_norm', 'pre_self_attention_norm']:
+                if candidate in layer_dict:
+                    pre_attn_norm_key = candidate
+                    break
+            for candidate in ['post_self_attention_layer_norm', 'pre_ffw_norm', 'post_self_attention_norm']:
+                if candidate in layer_dict:
+                    post_attn_norm_key = candidate
+                    break
+            pre_attn_norm = np.asarray(layer_dict[pre_attn_norm_key]['scale'])
+            post_attn_norm = np.asarray(layer_dict[post_attn_norm_key]['scale'])
 
         # --- Attention Norms ---
         hf_state_dict[f"{prefix}.input_layernorm.weight"] = to_torch(
-            pre_attn_norm[:, layer_idx].reshape(HIDDEN_SIZE)
+            pre_attn_norm.reshape(HIDDEN_SIZE)
         )
         hf_state_dict[f"{prefix}.post_attention_layernorm.weight"] = to_torch(
-            post_attn_norm[:, layer_idx].reshape(HIDDEN_SIZE)
+            post_attn_norm.reshape(HIDDEN_SIZE)
         )
 
         # --- Query projection ---
-        # MaxText shape: [hidden, num_layers, heads, head_dim]
-        # Extract layer: [hidden, heads, head_dim]
-        wq = q_kernel[:, layer_idx, :, :]
-
-        # Reverse query scaling: Q_hf = Q_maxtext * sqrt(head_dim)
         if not skip_query_scale:
             wq = reverse_query_scale(wq, HEAD_DIM)
 
-        # Reverse RoPE permutation
         if not skip_rope_unpermute:
             wq = unpermute_from_maxtext_rope(wq, NUM_ATTENTION_HEADS, HEAD_DIM)
 
-        # Reshape [hidden, heads, head_dim] -> [hidden, heads*head_dim] then transpose
         hf_state_dict[f"{prefix}.self_attn.q_proj.weight"] = to_torch(
             wq.reshape(HIDDEN_SIZE, NUM_ATTENTION_HEADS * HEAD_DIM).T
         )
 
         # --- Key projection ---
-        wk = k_kernel[:, layer_idx, :, :]
-
         if not skip_rope_unpermute:
             wk = unpermute_from_maxtext_rope(wk, NUM_KV_HEADS, HEAD_DIM)
 
@@ -285,31 +351,20 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
             wk.reshape(HIDDEN_SIZE, NUM_KV_HEADS * HEAD_DIM).T
         )
 
-        # --- Value projection (no RoPE, no scaling) ---
-        wv = v_kernel[:, layer_idx, :, :]
+        # --- Value projection ---
         hf_state_dict[f"{prefix}.self_attn.v_proj.weight"] = to_torch(
             wv.reshape(HIDDEN_SIZE, NUM_KV_HEADS * HEAD_DIM).T
         )
 
         # --- Output projection ---
-        wo = o_kernel[:, layer_idx, :, :]
         hf_state_dict[f"{prefix}.self_attn.o_proj.weight"] = to_torch(
             wo.reshape(NUM_ATTENTION_HEADS * HEAD_DIM, HIDDEN_SIZE).T
         )
 
         # --- MLP ---
-        # gate_proj (wi_0): [hidden, num_layers, mlp_dim] -> extract layer -> transpose
-        hf_state_dict[f"{prefix}.mlp.gate_proj.weight"] = to_torch(
-            wi_0_kernel[:, layer_idx, :].T
-        )
-        # up_proj (wi_1)
-        hf_state_dict[f"{prefix}.mlp.up_proj.weight"] = to_torch(
-            wi_1_kernel[:, layer_idx, :].T
-        )
-        # down_proj (wo)
-        hf_state_dict[f"{prefix}.mlp.down_proj.weight"] = to_torch(
-            wo_kernel[:, layer_idx, :].T
-        )
+        hf_state_dict[f"{prefix}.mlp.gate_proj.weight"] = to_torch(wi_0.T)
+        hf_state_dict[f"{prefix}.mlp.up_proj.weight"] = to_torch(wi_1.T)
+        hf_state_dict[f"{prefix}.mlp.down_proj.weight"] = to_torch(wo_mlp.T)
 
     # ── Step 5: Create model and load weights ─────────────────────────────
     logger.info("Creating HuggingFace LlamaForCausalLM and loading weights...")
@@ -347,8 +402,12 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
     out_path = Path(hf_out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Saving HF model to: {hf_out_dir}")
-    hf_model.save_pretrained(hf_out_dir, safe_serialization=True)
+    import jax
+    if jax.process_index() == 0:
+        logger.info(f"Saving HF model to: {hf_out_dir}")
+        hf_model.save_pretrained(hf_out_dir, safe_serialization=True)
+    else:
+        logger.info(f"Process {jax.process_index()} skipping HF model save.")
 
     # ── Step 8: Save tokenizer ────────────────────────────────────────────
     logger.info(f"Copying tokenizer from: {tokenizer_path}")
@@ -364,14 +423,16 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
             pad_token="<|pad|>",
             model_max_length=MAX_POSITION_EMBEDDINGS,
         )
-        tokenizer.save_pretrained(hf_out_dir)
-        logger.info(f"✅ Tokenizer saved (vocab_size={tokenizer.vocab_size})")
+        if jax.process_index() == 0:
+            tokenizer.save_pretrained(hf_out_dir)
+            logger.info(f"✅ Tokenizer saved (vocab_size={tokenizer.vocab_size})")
     else:
         logger.warning(f"No tokenizer.json found in {tokenizer_path}. "
                        "Skipping tokenizer save — you'll need to add it manually.")
 
     # ── Step 9: Save model card ───────────────────────────────────────────
-    model_card = """---
+    if jax.process_index() == 0:
+        model_card = """---
 language: en
 license: apache-2.0
 tags:
@@ -415,15 +476,15 @@ outputs = model.generate(**inputs, max_new_tokens=50)
 print(tokenizer.decode(outputs[0]))
 ```
 """
-    (out_path / "README.md").write_text(model_card)
+        (out_path / "README.md").write_text(model_card)
 
-    logger.info("=" * 60)
-    logger.info("✅ CONVERSION COMPLETE!")
-    logger.info(f"   Output directory: {hf_out_dir}")
-    logger.info(f"   Model config: {out_path / 'config.json'}")
-    logger.info(f"   Model weights: {out_path / 'model.safetensors'}")
-    logger.info(f"   Tokenizer: {out_path / 'tokenizer.json'}")
-    logger.info("=" * 60)
+        logger.info("=" * 60)
+        logger.info("✅ CONVERSION COMPLETE!")
+        logger.info(f"   Output directory: {hf_out_dir}")
+        logger.info(f"   Model config: {out_path / 'config.json'}")
+        logger.info(f"   Model weights: {out_path / 'model.safetensors'}")
+        logger.info(f"   Tokenizer: {out_path / 'tokenizer.json'}")
+        logger.info("=" * 60)
 
 
 if __name__ == "__main__":
