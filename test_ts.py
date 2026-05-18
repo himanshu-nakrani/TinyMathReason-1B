@@ -1,33 +1,29 @@
 import tensorstore as ts
-import asyncio
-import numpy as np
 
-async def main():
-    base = "gs://tinymath-reason-data-himanshu/checkpoints/tinymath-tiny-test/checkpoints/1/items"
-    kvs = await ts.KvStore.open({
-        'driver': 'ocdbt',
-        'base': base,
-    })
-    keys = await kvs.list()
-    
-    # Filter only parameters
-    param_keys = [k.decode().replace('/zarr.json', '') for k in keys if 'params' in k.decode() and 'zarr.json' in k.decode()]
-    
-    res = {}
-    for key in param_keys:
+orbax_dir = "gs://tinymath-reason-data-himanshu/checkpoints/tinymath-tiny-test/checkpoints/1/items"
+
+kvs = ts.KvStore.open({
+    'driver': 'ocdbt',
+    'base': orbax_dir,
+}).result()
+
+keys = kvs.list().result()
+for k in keys:
+    k_str = k.decode()
+    if k_str.endswith("zarr.json"):
+        arr_path = k_str.replace("/zarr.json", "")
+        if "opt_state" in arr_path or "step" in arr_path: continue
+        
+        print(f"Opening {arr_path} with zarr3...")
         try:
-            dataset = await ts.open({
-                'driver': 'zarr',
-                'kvstore': {
-                    'driver': 'ocdbt',
-                    'base': f"{base}/{key}"
-                }
-            })
-            arr = await dataset.read()
-            res[key] = arr
-            print(f"Loaded {key} with shape {arr.shape}")
+            dataset = ts.open({
+                'driver': 'zarr3',
+                'kvstore': {'driver': 'ocdbt', 'base': orbax_dir},
+                'path': arr_path
+            }).result()
+            
+            arr = dataset.read().result()
+            print("Shape:", arr.shape, "Dtype:", arr.dtype)
+            break
         except Exception as e:
-            print(f"Failed to load {key}: {e}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
+            print("Error:", e)

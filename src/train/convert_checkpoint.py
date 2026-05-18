@@ -150,6 +150,11 @@ def load_orbax_with_tensorstore(orbax_dir):
             }).result()
             
             arr = dataset.read().result()
+            
+            # MaxText VariableState appends '.value' to parameter paths
+            if arr_path.endswith(".value"):
+                arr_path = arr_path[:-6]
+                
             parts = arr_path.split('.')
             current = ckpt
             for part in parts[:-1]:
@@ -321,6 +326,10 @@ def convert_checkpoint(orbax_dir: str, hf_out_dir: str, tokenizer_path: str,
                 if candidate in layer_dict:
                     post_attn_norm_key = candidate
                     break
+                    
+            if pre_attn_norm_key is None or post_attn_norm_key is None:
+                raise KeyError(f"Could not find norm keys in unrolled layer! Available: {sorted(layer_dict.keys())}")
+                
             pre_attn_norm = np.asarray(layer_dict[pre_attn_norm_key]['scale'])
             post_attn_norm = np.asarray(layer_dict[post_attn_norm_key]['scale'])
 
