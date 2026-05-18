@@ -84,6 +84,10 @@ find src/ -name "*.py" -exec sed -i 's/from flax.nnx import Pytree/from flax.nnx
 # Patch Flax 0.11+ API: .get_value() -> .value (Flax 0.10.5 uses .value property)
 find src/ -name "*.py" -exec sed -i 's/\.get_value()/.value/g' {} +
 
+# Patch jax.Ref removal in recent JAX
+sed -i 's/jax\.Ref/typing.Any/g' src/maxtext/kernels/ragged/ragged_gather*.py
+sed -i '1s/^/import typing\n/' src/maxtext/kernels/ragged/ragged_gather*.py
+
 
 
 cat << 'EOF' > patch_sharding.py
@@ -203,6 +207,11 @@ if getattr(jax, "_is_monkey_patched", False) is False:
         except AttributeError:
             pass
     jax.config.update = _patched_config_update
+
+    # Shim for jax.Ref (removed in recent JAX)
+    if not hasattr(jax, "Ref"):
+      from typing import Any
+      jax.Ref = Any
 
     # Shim for jax.set_mesh and jax.sharding.set_mesh (added in JAX 0.7.1, missing in 0.6.x)
     if not hasattr(jax, 'set_mesh'):
