@@ -23,13 +23,18 @@ This document tracks our progress through the accelerated Execution Plan.
   - Optimizer: AdamW (lr=3e-4, cosine decay, β1=0.9, β2=0.95)
   - Batch size: 64 sequences × 4096 tokens = ~262k tokens/step
   - Throughput: ~8,900 tokens/sec/chip (~66 TFLOP/s/device)
+- [x] **Checkpoint Conversion COMPLETE.** 
+  - Output: `./hf_1b_model/` (HuggingFace Llama format)
+  - Format: `bfloat16` safetensors (2.1GB)
+  - Verification: Successful forward pass on CPU.
 - [x] Rewrite `convert_checkpoint.py` — fixed critical bugs (vocab_size, stacked layers, query scaling, RoPE permutation, tokenizer).
 - [x] Create `inspect_checkpoint.py` — utility to dump PyTree structure before conversion.
 - [x] Fix `tokenizer/tokenizer_config.json` — invalid class name → `PreTrainedTokenizerFast`.
-- [x] **NEXT →** Perform Checkpoint Conversion.
+- [x] **NEXT →** Phase 3: Post-Training SFT.
 
-## Phase 3: Post-Training SFT (Days 16-17)
-- [ ] Run `convert_checkpoint.py` to produce HuggingFace safetensors model.
+## Phase 3: Post-Training SFT (Days 16-17) ✅ (CONVERSION)
+- [x] Run `convert_checkpoint.py` to produce HuggingFace safetensors model.
+- [ ] Evaluate base model performance on benchmarks (GSM8K, MATH).
 - [ ] Provision GPU instance (AMD MI300X or equivalent).
 - [ ] Stage 1 SFT: Prepare data and train on conversational prior (No CoT).
 - [ ] Stage 2 SFT: Resize tokenizer (+ `<think>`) and train on reasoning traces (MathInstruct, OpenThoughts).
