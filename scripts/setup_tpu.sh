@@ -12,6 +12,12 @@
 
 set -e  # Exit on first error
 
+# 0. Setup Python 3.12 Virtual Environment
+echo "Setting up Python 3.12 virtual environment..."
+python3.12 -m venv $HOME/venv312
+source $HOME/venv312/bin/activate
+pip install --upgrade pip
+
 # 1. Clone MaxText (always fresh to ensure pinned version)
 echo "Setting up MaxText..."
 rm -rf $HOME/maxtext
@@ -37,46 +43,19 @@ sed -i 's/ModelName = Literal\[/ModelName = Literal["tinymath-1b", /' src/maxtex
 git checkout -- src/maxtext/trainers/pre_train/train.py 2>/dev/null || true
 git checkout -- src/maxtext/utils/sharding.py 2>/dev/null || true
 
-# 3. Install only the runtime dependencies needed for training
-# (Skip `pip install -e .` — it pulls in MaxText's full dev tree and takes 30+ min to resolve.
-#  We use PYTHONPATH=src instead to make MaxText importable.)
-echo "Installing runtime dependencies..."
-pip install --upgrade pip
-pip install \
-    flax==0.10.5 \
-    orbax-checkpoint \
-    optax \
-    grain-nightly \
-    omegaconf \
-    protobuf \
-    pydantic \
-    jaxtyping \
-    safetensors \
-    huggingface-hub \
-    aqtp \
-    google-cloud-storage \
-    absl-py \
-    tensorflow-cpu \
-    tensorflow-datasets \
-    datasets \
-    gcsfs \
-    transformers \
-    tokenizers \
-    tiktoken \
-    sentencepiece \
-    sympy \
-    Pillow \
-    ml_goodput_measurement \
-    cloud_tpu_diagnostics \
-    ml-collections \
-    tensorboardX \
-    zstandard
+# 3. Install dependencies using MaxText's official setup script
+echo "Installing dependencies via MaxText setup.sh..."
+if [ -f "$HOME/maxtext/src/dependencies/scripts/setup.sh" ]; then
+    cd $HOME/maxtext
+    bash src/dependencies/scripts/setup.sh
+else
+    echo "ERROR: setup.sh not found in $HOME/maxtext/src/dependencies/scripts/"
+    find $HOME/maxtext -name setup.sh
+    exit 1
+fi
 
-# 4. Install stable JAX with TPU support
-echo "Purging conflicting JAX and TPU nightly builds..."
-pip uninstall -y jax jaxlib libtpu libtpu-nightly 2>/dev/null || true
-echo "Installing stable JAX with TPU support..."
-pip install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# 4. Patch compatibility issues (Flax nnx, JAX reshard, etc.)
+# (We still need our custom patches and mocks)
 
 # 7. Backwards compatibility patch for Pytree -> Object and reshard
 find src/ -name "*.py" -exec sed -i 's/from flax.nnx import Pytree/from flax.nnx import Object as Pytree/g' {} +
@@ -140,51 +119,38 @@ from unittest.mock import MagicMock
 # ─────────────────────────────────────────────────────────────
 # Pallas compatibility shim (pallas moved between JAX versions)
 # We don't use Pallas GPU kernels for TPU training, so mock it.
-# Uses a meta_path finder to intercept ALL pallas imports.
 # ─────────────────────────────────────────────────────────────
-import types
 import importlib.abc
 import importlib.machinery
+import types
+
+class _MockModule(types.ModuleType):
+    def __init__(self, name):
+        super().__init__(name)
+        self.__path__ = []
+        self.__spec__ = importlib.machinery.ModuleSpec(name, None, is_package=True)
+    def __getattr__(self, name):
+        return MagicMock()
+
+def mock_package(name):
+    if name not in sys.modules:
+        sys.modules[name] = _MockModule(name)
 
 class _PallasMockFinder(importlib.abc.MetaPathFinder):
-    """Intercepts any import of jax.pallas.* or jax.experimental.pallas.*"""
-    _PREFIXES = ('jax.pallas', 'jax.experimental.pallas')
-
-    def find_module(self, fullname, path=None):
-        for prefix in self._PREFIXES:
-            if fullname == prefix or fullname.startswith(prefix + '.'):
-                return self
+    def find_spec(self, fullname, path, target=None):
+        if fullname.startswith(('jax.pallas', 'jax.experimental.pallas')):
+            return importlib.machinery.ModuleSpec(fullname, self, is_package=True)
         return None
+    def create_module(self, spec):
+        return _MockModule(spec.name)
+    def exec_module(self, module):
+        pass
 
-    def load_module(self, fullname):
-        if fullname in sys.modules:
-            return sys.modules[fullname]
-        # Create a module that acts as a package and returns MagicMock for attrs
-        mod = types.ModuleType(fullname)
-        mod.__path__ = []
-        mod.__file__ = '<pallas_mock>'
-        mod.__loader__ = self
-        mod.__package__ = fullname
-        # Make attribute access return MagicMock for any unknown attr
-        _real_mod_class = type('PallasMock', (types.ModuleType,), {
-            '__getattr__': lambda self, name: MagicMock()
-        })
-        mock = _real_mod_class(fullname)
-        mock.__path__ = []
-        mock.__file__ = '<pallas_mock>'
-        mock.__loader__ = self
-        mock.__package__ = fullname
-        sys.modules[fullname] = mock
-        return mock
-
-# Install the finder BEFORE any MaxText imports
 sys.meta_path.insert(0, _PallasMockFinder())
 
-# Set attributes on jax so direct attribute access works too
-if not hasattr(jax, 'pallas'):
-    jax.pallas = sys.modules.get('jax.pallas') or _PallasMockFinder().load_module('jax.pallas')
-if not hasattr(jax.experimental, 'pallas'):
-    jax.experimental.pallas = sys.modules.get('jax.experimental.pallas') or _PallasMockFinder().load_module('jax.experimental.pallas')
+# Pre-populate base modules
+mock_package("jax.pallas")
+mock_package("jax.experimental.pallas")
 
 # ─────────────────────────────────────────────────────────────
 # JAX compatibility patches
@@ -303,17 +269,6 @@ if not hasattr(grain_python, "PyGrainCheckpointHandler"):
         def save(self, *args, **kwargs): return None
         def restore(self, *args, **kwargs): return None
     grain_python.PyGrainCheckpointHandler = DummyCheckpointHandler
-
-# ─────────────────────────────────────────────────────────────
-# JAX distributed initialization
-# Must happen before any Orbax checkpoint manager is created
-# ─────────────────────────────────────────────────────────────
-import multiprocessing
-if multiprocessing.current_process().name == 'MainProcess':
-    try:
-        jax.distributed.initialize()
-    except Exception:
-        pass
 MOCK_EOF
 # 9. Inject the mock loader at the top of train.py if not already injected
 if ! grep -q "Mock internal Google-only modules" src/maxtext/trainers/pre_train/train.py; then
@@ -324,7 +279,7 @@ fi
 # 10. Start the training run (PRODUCTION)
 echo "=============================================="
 echo "Starting MaxText Pretraining (PRODUCTION)..."
-echo "  run_name: tinymath-1b-prod-run1"
+echo "  run_name: tinymath-1b-prod-run11"
 echo "  dataset: HF pre-tokenized jsonl.zst"
 echo "=============================================="
 

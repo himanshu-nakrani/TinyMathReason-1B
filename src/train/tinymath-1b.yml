@@ -8,4 +8,4 @@ num_decoder_layers: 22
 head_dim: 128
 vocab_size: 32768
 attention: "dot_product"
-scan_layers: True
+scan_layers: False

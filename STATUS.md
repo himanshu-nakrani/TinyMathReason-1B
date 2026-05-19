@@ -2,7 +2,7 @@
 
 This document tracks our progress through the accelerated Execution Plan.
 
-**Last Updated:** 2026-05-13
+**Last Updated:** 2026-05-18
 
 ## Phase 1: Setup & Data Prep (Days 1-5) ✅
 - [x] Project setup complete (Repo structured, `venv` created, dependencies installed).
@@ -15,22 +15,21 @@ This document tracks our progress through the accelerated Execution Plan.
 ## Phase 2: Pretraining (Days 6-15) ✅
 - [x] Provision `v4-32` cluster and run MaxText smoke test.
 - [x] Setup TPU VM (MaxText, dependencies, config, mock injector for JAX/Pallas compatibility).
-- [x] Launch main pretraining run on `v4-64` (upgraded from v4-32 for faster throughput).
-- [x] Handle multiple spot preemptions (moved to `tinymath-1b-prod-run2` for clean Orbax state).
-- [x] Resolve JAX 0.6.2 breaking changes (Pallas import path migration, AbstractMesh, reshard API).
-- [x] **Pretraining COMPLETE.** 54,363 steps (~57B tokens) finished.
-  - Final checkpoint: `gs://tinymath-reason-data-himanshu/checkpoints/tinymath-1b-prod-run2/checkpoints/54362/`
-  - Architecture: 1.07B params (22 layers, 2048 dim, 16 query heads, 4 KV heads, 5632 MLP dim)
+- [x] Launch main pretraining rerun on `v4-64` (Run 11).
+- [x] **Pretraining COMPLETE.** 54,362 steps (~57B tokens) finished successfully.
+  - Final checkpoint: `gs://tinymath-reason-data-himanshu/checkpoints/tinymath-1b-prod-run11/checkpoints/54362/`
+  - Architecture: **1.126B params** (22 layers, 2048 dim, 16 query heads, 4 KV heads, 5632 MLP dim)
+  - Config: `pure_nnx_decoder: True` + `scan_layers: False` + `per_device_batch_size: 2`.
   - Optimizer: AdamW (lr=3e-4, cosine decay, β1=0.9, β2=0.95)
-  - Batch size: 256 sequences × 4096 tokens = ~1M tokens/step
-  - Checkpoint interval: every 1,000 steps (12 checkpoints saved)
-- [x] Rewrite `convert_checkpoint.py` — fixed 5 critical bugs (vocab_size, stacked layers, query scaling, RoPE permutation, tokenizer).
+  - Batch size: 64 sequences × 4096 tokens = ~262k tokens/step
+  - Throughput: ~8,900 tokens/sec/chip (~66 TFLOP/s/device)
+- [x] Rewrite `convert_checkpoint.py` — fixed critical bugs (vocab_size, stacked layers, query scaling, RoPE permutation, tokenizer).
 - [x] Create `inspect_checkpoint.py` — utility to dump PyTree structure before conversion.
 - [x] Fix `tokenizer/tokenizer_config.json` — invalid class name → `PreTrainedTokenizerFast`.
-- [ ] **NEXT →** Run `inspect_checkpoint.py` on GCS checkpoint to verify PyTree structure.
-- [ ] Run `convert_checkpoint.py` to produce HuggingFace safetensors model.
+- [x] **NEXT →** Perform Checkpoint Conversion.
 
 ## Phase 3: Post-Training SFT (Days 16-17)
+- [ ] Run `convert_checkpoint.py` to produce HuggingFace safetensors model.
 - [ ] Provision GPU instance (AMD MI300X or equivalent).
 - [ ] Stage 1 SFT: Prepare data and train on conversational prior (No CoT).
 - [ ] Stage 2 SFT: Resize tokenizer (+ `<think>`) and train on reasoning traces (MathInstruct, OpenThoughts).
