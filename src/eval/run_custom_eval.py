@@ -27,11 +27,14 @@ def run_custom_eval(model_path: str, output_file: str):
     """
     logging.info(f"Loading model {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
+    
+    device = "cpu"
+    dtype = torch.bfloat16
+    
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto"
-    )
+        torch_dtype=dtype
+    ).to(device)
     
     system_prompt = "You are a mathematical reasoning assistant. Solve problems step by step, showing all work clearly."
     
@@ -40,20 +43,26 @@ def run_custom_eval(model_path: str, output_file: str):
     for prob in EVAL_PROBLEMS:
         logging.info(f"Evaluating ({prob['level']}): {prob['q']}")
         
-        chat = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prob["q"]}
-        ]
-        
-        prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        # Check if tokenizer has a chat template configured
+        if getattr(tokenizer, "chat_template", None) is not None:
+            chat = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prob["q"]}
+            ]
+            prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+        else:
+            # Fallback formatting for raw base models
+            prompt = f"Below is a math problem. Solve it step-by-step.\nProblem: {prob['q']}\nSolution:"
+            
+        inputs = tokenizer(prompt, return_tensors="pt").to(device)
         
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=512,
+                max_new_tokens=256,  # Cap at 256 for CPU local baseline speed
                 temperature=0.0, # Greedy for evaluation
-                pad_token_id=tokenizer.eos_token_id
+                do_sample=False,
+                pad_token_id=tokenizer.eos_token_id or 2
             )
             
         generated_len = outputs.shape[1] - inputs.input_ids.shape[1]

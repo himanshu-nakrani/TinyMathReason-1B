@@ -1,0 +1,24 @@
+# SFT Stage 1: Conversational Prior Configuration
+# Goal: Train model on general dialogue and instruction-following formats (Alpaca)
+
+model_path: "../../hf_1b_model"
+dataset_path: "./sft_data/stage1_chat"
+output_dir: "./sft_output/stage1"
+
+# Hyperparameters
+epochs: 2
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 8  # Effective batch size = 32 on 1 GPU
+learning_rate: 2e-5
+weight_decay: 0.1
+warmup_ratio: 0.05
+max_seq_length: 4096
+
+# Environment & Hardware
+use_flash_attn: true
+enable_wandb: true
+
+# DeepSpeed ZeRO-2 Configuration (path to a deepspeed config JSON)
+# If not using DeepSpeed, leave this commented out
+# deepspeed_config: "ds_config_zero2.json"
