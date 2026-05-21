@@ -125,16 +125,27 @@ def train_sft(
     data_collator = DataCollatorForSeq2Seq(tokenizer, pad_to_multiple_of=8)
 
     # 7. SFT Trainer
-    trainer = SFTTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
-        dataset_text_field="text",
-        max_seq_length=config.get('max_seq_length', 4096),
-        data_collator=data_collator,
-    )
+    import inspect
+    sig = inspect.signature(SFTTrainer.__init__)
+    
+    trainer_kwargs = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": train_dataset,
+        "eval_dataset": eval_dataset,
+        "dataset_text_field": "text",
+        "max_seq_length": config.get('max_seq_length', 4096),
+        "data_collator": data_collator,
+    }
+    
+    if "processing_class" in sig.parameters:
+        logging.info("SFTTrainer expects 'processing_class'. Passing tokenizer as processing_class.")
+        trainer_kwargs["processing_class"] = tokenizer
+    else:
+        logging.info("SFTTrainer expects 'tokenizer'. Passing tokenizer directly.")
+        trainer_kwargs["tokenizer"] = tokenizer
+        
+    trainer = SFTTrainer(**trainer_kwargs)
     
     logging.info("Starting SFT training...")
     trainer.train()
