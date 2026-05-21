@@ -149,9 +149,6 @@ def train_sft(
     else:
         training_args = TrainingArguments(**config_kwargs)
     
-    # Use DataCollatorForSeq2Seq to ensure proper padding
-    data_collator = DataCollatorForSeq2Seq(tokenizer, pad_to_multiple_of=8)
-
     # 7. SFT Trainer
     sig = inspect.signature(SFTTrainer.__init__)
     
@@ -160,7 +157,6 @@ def train_sft(
         "args": training_args,
         "train_dataset": train_dataset,
         "eval_dataset": eval_dataset,
-        "data_collator": data_collator,
     }
     
     # Route SFT-specific params directly to SFTTrainer only if not already consumed by SFTConfig
