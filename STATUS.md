@@ -34,7 +34,14 @@ This document tracks our progress through the accelerated Execution Plan.
 
 ## Phase 3: Post-Training SFT (Days 16-17) ✅ (CONVERSION)
 - [x] Run `convert_checkpoint.py` to produce HuggingFace safetensors model.
-- [ ] Evaluate base model performance on benchmarks (GSM8K, MATH).
+- [x] Evaluate base model performance on benchmarks (GSM8K, MATH, MMLU, ARC, HellaSwag).
+  * **Base Model Baseline Results:**
+    * GSM8K (8-shot): **1.0%** Exact Match
+    * MATH (Algebra) (4-shot): **0.0%** Exact Match
+    * ARC-Easy (0-shot): **29.9%** Accuracy (Norm)
+    * ARC-Challenge (25-shot): **21.7%** Accuracy (Norm)
+    * HellaSwag (10-shot): **25.8%** Accuracy (Norm)
+    * MMLU (5-shot): **23.5%** Accuracy
 - [ ] Provision GPU instance (AMD MI300X or equivalent).
 - [ ] Stage 1 SFT: Prepare data and train on conversational prior (No CoT).
 - [ ] Stage 2 SFT: Resize tokenizer (+ `<think>`) and train on reasoning traces (MathInstruct, OpenThoughts).
