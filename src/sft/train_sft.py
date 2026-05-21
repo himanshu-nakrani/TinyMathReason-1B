@@ -108,58 +108,51 @@ def train_sft(
     except ImportError:
         logging.info("SFTConfig is not available. Using standard TrainingArguments...")
 
+    import inspect
+    
+    config_kwargs = {
+        "output_dir": output_dir,
+        "num_train_epochs": config.get('epochs', 2),
+        "per_device_train_batch_size": config.get('per_device_train_batch_size', 4),
+        "per_device_eval_batch_size": config.get('per_device_eval_batch_size', 4),
+        "gradient_accumulation_steps": config.get('gradient_accumulation_steps', 8),
+        "learning_rate": float(config.get('learning_rate', 2e-5)),
+        "weight_decay": config.get('weight_decay', 0.1),
+        "warmup_ratio": config.get('warmup_ratio', 0.05),
+        "lr_scheduler_type": "cosine",
+        "logging_steps": 10,
+        "eval_strategy": "steps",
+        "eval_steps": 500,
+        "save_strategy": "steps",
+        "save_steps": 500,
+        "bf16": True,
+        "report_to": "wandb" if config.get('enable_wandb', True) else "none",
+        "run_name": "tinymath-1b-sft",
+        "deepspeed": config.get('deepspeed_config', None),
+        "gradient_checkpointing": True,
+    }
+    
+    sft_params = {
+        "dataset_text_field": "text",
+        "max_seq_length": config.get('max_seq_length', 4096),
+    }
+    
+    added_to_config = {}
+    
     if use_sft_config:
-        training_args = SFTConfig(
-            output_dir=output_dir,
-            num_train_epochs=config.get('epochs', 2),
-            per_device_train_batch_size=config.get('per_device_train_batch_size', 4),
-            per_device_eval_batch_size=config.get('per_device_eval_batch_size', 4),
-            gradient_accumulation_steps=config.get('gradient_accumulation_steps', 8),
-            learning_rate=float(config.get('learning_rate', 2e-5)),
-            weight_decay=config.get('weight_decay', 0.1),
-            warmup_ratio=config.get('warmup_ratio', 0.05),
-            lr_scheduler_type="cosine",
-            logging_steps=10,
-            eval_strategy="steps",
-            eval_steps=500,
-            save_strategy="steps",
-            save_steps=500,
-            bf16=True,
-            report_to="wandb" if config.get('enable_wandb', True) else "none",
-            run_name="tinymath-1b-sft",
-            deepspeed=config.get('deepspeed_config', None),
-            gradient_checkpointing=True,
-            dataset_text_field="text",
-            max_seq_length=config.get('max_seq_length', 4096),
-        )
+        config_sig = inspect.signature(SFTConfig.__init__)
+        for k, v in sft_params.items():
+            if k in config_sig.parameters:
+                config_kwargs[k] = v
+                added_to_config[k] = True
+        training_args = SFTConfig(**config_kwargs)
     else:
-        training_args = TrainingArguments(
-            output_dir=output_dir,
-            num_train_epochs=config.get('epochs', 2),
-            per_device_train_batch_size=config.get('per_device_train_batch_size', 4),
-            per_device_eval_batch_size=config.get('per_device_eval_batch_size', 4),
-            gradient_accumulation_steps=config.get('gradient_accumulation_steps', 8),
-            learning_rate=float(config.get('learning_rate', 2e-5)),
-            weight_decay=config.get('weight_decay', 0.1),
-            warmup_ratio=config.get('warmup_ratio', 0.05),
-            lr_scheduler_type="cosine",
-            logging_steps=10,
-            eval_strategy="steps",
-            eval_steps=500,
-            save_strategy="steps",
-            save_steps=500,
-            bf16=True,
-            report_to="wandb" if config.get('enable_wandb', True) else "none",
-            run_name="tinymath-1b-sft",
-            deepspeed=config.get('deepspeed_config', None),
-            gradient_checkpointing=True,
-        )
+        training_args = TrainingArguments(**config_kwargs)
     
     # Use DataCollatorForSeq2Seq to ensure proper padding
     data_collator = DataCollatorForSeq2Seq(tokenizer, pad_to_multiple_of=8)
 
     # 7. SFT Trainer
-    import inspect
     sig = inspect.signature(SFTTrainer.__init__)
     
     trainer_kwargs = {
@@ -170,10 +163,11 @@ def train_sft(
         "data_collator": data_collator,
     }
     
-    # Add SFT-specific params directly to SFTTrainer only if not using SFTConfig
-    if not use_sft_config:
-        trainer_kwargs["dataset_text_field"] = "text"
-        trainer_kwargs["max_seq_length"] = config.get('max_seq_length', 4096)
+    # Route SFT-specific params directly to SFTTrainer only if not already consumed by SFTConfig
+    for k, v in sft_params.items():
+        if k not in added_to_config and k in sig.parameters:
+            logging.info(f"Routing SFT-specific argument '{k}' to SFTTrainer constructor.")
+            trainer_kwargs[k] = v
     
     if "processing_class" in sig.parameters:
         logging.info("SFTTrainer expects 'processing_class'. Passing tokenizer as processing_class.")
