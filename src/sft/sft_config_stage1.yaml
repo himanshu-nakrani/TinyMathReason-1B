@@ -1,7 +1,7 @@
 # SFT Stage 1: Conversational Prior Configuration
 # Goal: Train model on general dialogue and instruction-following formats (Alpaca)
 
-model_path: "../../hf_1b_model"
+model_path: "himanshunakrani9/TinyMathReason-1B-base"
 dataset_path: "./sft_data/stage1_chat"
 output_dir: "./sft_output/stage1"
 

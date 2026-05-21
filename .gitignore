@@ -43,3 +43,10 @@ MaxText/
 
 # MacOS
 .DS_Store
+
+# Google Cloud Config and Tmp
+.gcloud_config/
+gcloud_tmp/
+
+# Large Model Weights
+hf_1b_model/model.safetensors
