@@ -42,6 +42,24 @@ def train_sft(
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+        
+    # Programmatically inject ChatML template if not set (base models)
+    if getattr(tokenizer, "chat_template", None) is None:
+        logging.info("Tokenizer has no chat template configured. Injecting default ChatML template...")
+        tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}"
+            "{{ '<|im_start|>user\\n' + message['content'] + '<|im_end|>\\n' }}"
+            "{% elif message['role'] == 'system' %}"
+            "{{ '<|im_start|>system\\n' + message['content'] + '<|im_end|>\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ '<|im_start|>assistant\\n' + message['content'] + '<|im_end|>\\n' }}"
+            "{% endif %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|im_start|>assistant\\n' }}"
+            "{% endif %}"
+        )
 
     # 3. Load model
     logging.info(f"Loading HF model from {model_path}...")
