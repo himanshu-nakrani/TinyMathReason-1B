@@ -111,13 +111,25 @@ def format_reward_func(completions, **kwargs) -> list[float]:
     Starts with <think>, has non-empty reasoning inside, closes with </think>,
     and has a non-empty answer following it. No <answer> tags are required.
     """
+    import os
+    os.makedirs("./logs", exist_ok=True)
+    
     # Pattern: Must start with <think>, contain non-empty content,
     # close with </think>, followed by non-empty answer text.
     pattern = r"^\s*<think>\s*\S.*?</think>\s*\S.*"
 
     rewards = []
-    for comp in completions:
+    for i, comp in enumerate(completions):
         content = _get_completion_text(comp)
+        
+        # Log first two completions of every batch to debug
+        if i < 2:
+            with open("./logs/debug_completions.txt", "a") as f:
+                f.write(f"\n====================================\n")
+                f.write(f"COMPLETION LENGTH: {len(content)}\n")
+                f.write(f"COMPLETION CONTENT:\n{repr(content)}\n")
+                f.write(f"====================================\n")
+
         if re.search(pattern, content, re.DOTALL):
             rewards.append(1.0)
         else:
