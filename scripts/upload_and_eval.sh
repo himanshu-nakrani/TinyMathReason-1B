@@ -88,10 +88,10 @@ run_benchmarks() {
     # ---- GSM8K (8-shot) ----
     log_info "=== Running GSM8K (8-shot) ==="
     lm_eval --model hf \
-        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16" \
+        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16,attn_implementation=flash_attention_2" \
         --tasks gsm8k \
         --num_fewshot 8 \
-        --batch_size auto \
+        --batch_size 256 \
         --output_path "$EVAL_OUTPUT_DIR/gsm8k" \
         2>&1 | tee "$EVAL_OUTPUT_DIR/gsm8k.log"
     echo ""
@@ -99,10 +99,10 @@ run_benchmarks() {
     # ---- MATH (Algebra, 4-shot) ----
     log_info "=== Running MATH Algebra (4-shot) ==="
     lm_eval --model hf \
-        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16" \
+        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16,attn_implementation=flash_attention_2" \
         --tasks minerva_math_algebra \
         --num_fewshot 4 \
-        --batch_size auto \
+        --batch_size 256 \
         --output_path "$EVAL_OUTPUT_DIR/math_algebra" \
         2>&1 | tee "$EVAL_OUTPUT_DIR/math_algebra.log"
     echo ""
@@ -110,10 +110,10 @@ run_benchmarks() {
     # ---- ARC-Easy (0-shot) ----
     log_info "=== Running ARC-Easy (0-shot) ==="
     lm_eval --model hf \
-        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16" \
+        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16,attn_implementation=flash_attention_2" \
         --tasks arc_easy \
         --num_fewshot 0 \
-        --batch_size auto \
+        --batch_size 256 \
         --output_path "$EVAL_OUTPUT_DIR/arc_easy" \
         2>&1 | tee "$EVAL_OUTPUT_DIR/arc_easy.log"
     echo ""
@@ -121,10 +121,10 @@ run_benchmarks() {
     # ---- ARC-Challenge (25-shot) ----
     log_info "=== Running ARC-Challenge (25-shot) ==="
     lm_eval --model hf \
-        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16" \
+        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16,attn_implementation=flash_attention_2" \
         --tasks arc_challenge \
         --num_fewshot 25 \
-        --batch_size auto \
+        --batch_size 256 \
         --output_path "$EVAL_OUTPUT_DIR/arc_challenge" \
         2>&1 | tee "$EVAL_OUTPUT_DIR/arc_challenge.log"
     echo ""
@@ -132,10 +132,10 @@ run_benchmarks() {
     # ---- HellaSwag (10-shot) ----
     log_info "=== Running HellaSwag (10-shot) ==="
     lm_eval --model hf \
-        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16" \
+        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16,attn_implementation=flash_attention_2" \
         --tasks hellaswag \
         --num_fewshot 10 \
-        --batch_size auto \
+        --batch_size 256 \
         --output_path "$EVAL_OUTPUT_DIR/hellaswag" \
         2>&1 | tee "$EVAL_OUTPUT_DIR/hellaswag.log"
     echo ""
@@ -143,10 +143,10 @@ run_benchmarks() {
     # ---- MMLU (5-shot) ----
     log_info "=== Running MMLU (5-shot) ==="
     lm_eval --model hf \
-        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16" \
+        --model_args "pretrained=$MODEL_DIR,dtype=bfloat16,attn_implementation=flash_attention_2" \
         --tasks mmlu \
         --num_fewshot 5 \
-        --batch_size auto \
+        --batch_size 256 \
         --output_path "$EVAL_OUTPUT_DIR/mmlu" \
         2>&1 | tee "$EVAL_OUTPUT_DIR/mmlu.log"
     echo ""
