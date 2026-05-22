@@ -28,7 +28,7 @@ def run_custom_eval(model_path: str, output_file: str):
     logging.info(f"Loading model {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16
     
     model = AutoModelForCausalLM.from_pretrained(
@@ -55,6 +55,7 @@ def run_custom_eval(model_path: str, output_file: str):
             prompt = f"Below is a math problem. Solve it step-by-step.\nProblem: {prob['q']}\nSolution:"
             
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
+        inputs.pop("token_type_ids", None)
         
         with torch.no_grad():
             outputs = model.generate(
