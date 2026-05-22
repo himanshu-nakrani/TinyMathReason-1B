@@ -214,6 +214,7 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
 
     logging.info(f"Loading tokenizer from {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
+    tokenizer.padding_side = "left"  # Crucial: MUST use left-padding for decoder-only batch generation!
 
     # Enforce rigid padding/EOS mapping to prevent masking errors
     if tokenizer.pad_token is None:
