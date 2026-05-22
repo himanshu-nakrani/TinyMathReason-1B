@@ -209,6 +209,24 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
         tokenizer.pad_token = tokenizer.eos_token
         logging.info(f"Set pad_token = eos_token (ID: {tokenizer.eos_token_id})")
 
+    # Programmatically inject ChatML template if not set (base models/SFT checkpoint configs)
+    if getattr(tokenizer, "chat_template", None) is None:
+        logging.info("Tokenizer has no chat template configured. Injecting default ChatML template...")
+        tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}"
+            "{{ '<|im_start|>user\\n' + message['content'] + '<|im_end|>\\n' }}"
+            "{% elif message['role'] == 'system' %}"
+            "{{ '<|im_start|>system\\n' + message['content'] + '<|im_end|>\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ '<|im_start|>assistant\\n' + message['content'] + '<|im_end|>\\n' }}"
+            "{% endif %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|im_start|>assistant\\n' }}"
+            "{% endif %}"
+        )
+
     # Remove token_type_ids to prevent Llama models from throwing an error during generate()
     if "token_type_ids" in tokenizer.model_input_names:
         tokenizer.model_input_names.remove("token_type_ids")
