@@ -39,9 +39,27 @@ def correctness_reward_func(prompts, completions, answer, **kwargs) -> list[floa
             rewards.append(0.0)
     return rewards
 
+def format_reward_func(prompts, completions, **kwargs) -> list[float]:
+    """
+    Reward function to enforce output structure:
+    Ensures it has exactly one <think> and </think> block in the correct order.
+    """
+    rewards = []
+    for comp in completions:
+        count_start = comp.count("<think>")
+        count_end = comp.count("</think>")
+        if count_start == 1 and count_end == 1:
+            idx_start = comp.find("<think>")
+            idx_end = comp.find("</think>")
+            if idx_start < idx_end:
+                rewards.append(0.2) # Small format bonus
+                continue
+        rewards.append(0.0)
+    return rewards
+
 def format_prompt(example):
     """Format for GRPOTrainer."""
-    system_prompt = "You are a mathematical reasoning assistant. Solve problems step by step, showing all work clearly."
+    system_prompt = "You are a mathematical reasoning assistant. Solve problems step by step inside <think> tags, and then provide the final answer."
     example["prompt"] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": example["question"]}
@@ -90,7 +108,7 @@ def train_grpo(model_path: str, output_dir: str):
         model=model,
         args=training_args,
         train_dataset=dataset,
-        reward_funcs=[correctness_reward_func],
+        reward_funcs=[correctness_reward_func, format_reward_func],
         tokenizer=tokenizer,
     )
     
