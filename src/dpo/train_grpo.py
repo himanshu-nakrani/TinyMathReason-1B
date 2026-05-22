@@ -70,9 +70,26 @@ def correctness_reward_func(prompts, completions, answer, **kwargs) -> list[floa
 
     Returns 1.0 for correct, 0.0 for incorrect.
     """
+    completion_ids = kwargs.get("completion_ids", None)
+    
+    # If completion_ids are available, decode them WITH special tokens preserved
+    # to ensure </think> boundaries are not stripped.
+    if completion_ids is not None:
+        try:
+            from transformers import AutoTokenizer
+            temp_tok = AutoTokenizer.from_pretrained("src/sft/sft_output/stage2/final")
+            decoded_completions = [
+                temp_tok.decode(ids, skip_special_tokens=False)
+                for ids in completion_ids
+            ]
+        except Exception:
+            decoded_completions = [_get_completion_text(c) for c in completions]
+    else:
+        decoded_completions = [_get_completion_text(c) for c in completions]
+
     rewards = []
-    for comp, gt in zip(completions, answer):
-        content = _get_completion_text(comp)
+    for comp, gt in zip(decoded_completions, answer):
+        content = comp
         
         # Isolate candidate answer strictly after </think>
         if "</think>" in content:
@@ -118,10 +135,22 @@ def format_reward_func(completions, **kwargs) -> list[float]:
     # close with </think>, followed by non-empty answer text.
     pattern = r"^\s*<think>\s*\S.*?</think>\s*\S.*"
 
+    completion_ids = kwargs.get("completion_ids", None)
+    if completion_ids is not None:
+        try:
+            from transformers import AutoTokenizer
+            temp_tok = AutoTokenizer.from_pretrained("src/sft/sft_output/stage2/final")
+            decoded_completions = [
+                temp_tok.decode(ids, skip_special_tokens=False)
+                for ids in completion_ids
+            ]
+        except Exception:
+            decoded_completions = [_get_completion_text(c) for c in completions]
+    else:
+        decoded_completions = [_get_completion_text(c) for c in completions]
+
     rewards = []
-    for i, comp in enumerate(completions):
-        content = _get_completion_text(comp)
-        
+    for i, content in enumerate(decoded_completions):
         # Log first two completions of every batch to debug
         if i < 2:
             with open("./logs/debug_completions.txt", "a") as f:
