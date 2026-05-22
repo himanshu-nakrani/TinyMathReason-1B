@@ -47,7 +47,7 @@ This document tracks our progress through the accelerated Execution Plan.
 - [x] Stage 2 SFT: Resize tokenizer (+ `<think>`) and train on reasoning traces (MathInstruct, MetaMathQA).
 - [x] **Post-SFT Comprehensive Evaluation COMPLETE:**
   * **SFT Model Results & Deltas (vs Base):**
-    * GSM8K (8-shot): **0.00%** (Base: 1.00%) *-- Format mismatch in zero-shot raw extraction*
+    * GSM8K (8-shot): **0.00%** (Base: 1.00%) *-- Format mismatch in zero-shot raw extraction* (**1.00%** with aligned ChatML template! 🌟)
     * MATH (Algebra) (4-shot): **0.00%** (Base: 0.00%)
     * ARC-Easy (0-shot): **25.51%** (Base: 29.90%)
     * ARC-Challenge (25-shot): **24.66%** (Base: 21.70%) -- **+2.96% Absolute Gain** 🎉
