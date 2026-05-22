@@ -36,7 +36,7 @@ def run_custom_eval(model_path: str, output_file: str):
         torch_dtype=dtype
     ).to(device)
     
-    system_prompt = "You are a mathematical reasoning assistant. Solve problems step by step, showing all work clearly."
+    system_prompt = "You are a mathematical reasoning assistant. Solve problems step by step inside <think> tags, and then provide the final answer."
     
     results = []
     
@@ -61,8 +61,9 @@ def run_custom_eval(model_path: str, output_file: str):
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=256,  # Cap at 256 for CPU local baseline speed
-                temperature=0.0, # Greedy for evaluation
-                do_sample=False,
+                temperature=0.7,
+                do_sample=True,
+                top_p=0.9,
                 pad_token_id=tokenizer.eos_token_id or 2
             )
             
