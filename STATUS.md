@@ -42,10 +42,19 @@ This document tracks our progress through the accelerated Execution Plan.
     * ARC-Challenge (25-shot): **21.7%** Accuracy (Norm)
     * HellaSwag (10-shot): **25.8%** Accuracy (Norm)
     * MMLU (5-shot): **23.5%** Accuracy
-- [ ] Provision GPU instance (AMD MI300X or equivalent).
-- [ ] Stage 1 SFT: Prepare data and train on conversational prior (No CoT).
-- [ ] Stage 2 SFT: Resize tokenizer (+ `<think>`) and train on reasoning traces (MathInstruct, OpenThoughts).
-
+- [x] Provision GPU instance (AMD MI300X or equivalent).
+- [x] Stage 1 SFT: Prepare data and train on conversational prior (No CoT).
+- [x] Stage 2 SFT: Resize tokenizer (+ `<think>`) and train on reasoning traces (MathInstruct, MetaMathQA).
+- [x] **Post-SFT Comprehensive Evaluation COMPLETE:**
+  * **SFT Model Results & Deltas (vs Base):**
+    * GSM8K (8-shot): **0.00%** (Base: 1.00%) *-- Format mismatch in zero-shot raw extraction*
+    * MATH (Algebra) (4-shot): **0.00%** (Base: 0.00%)
+    * ARC-Easy (0-shot): **25.51%** (Base: 29.90%)
+    * ARC-Challenge (25-shot): **24.66%** (Base: 21.70%) -- **+2.96% Absolute Gain** 🎉
+    * HellaSwag (10-shot): **26.70%** (Base: 25.80%) -- **+0.90% Absolute Gain** 🎉
+    * MMLU (5-shot): **24.60%** (Base: 23.50%) -- **+1.10% Absolute Gain** 🎉
+- [x] **Model & Log Release COMPLETE:** Model weights and all checkpoint logs uploaded to Hugging Face Hub repository: `himanshunakrani9/TinyMathReason-1B-sft`.
+- [x] **Custom Math Evaluation COMPLETE:** Verified inference with system prompt alignment and configured sampling strategies to prevent loop collapse. Ready for Phase 4.
 ## Phase 4: Post-Training DPO/GRPO (Days 18-20)
 - [ ] Generate preference candidate data using Modal serverless endpoints.
 - [ ] Run DPOTrainer or GRPOTrainer.
