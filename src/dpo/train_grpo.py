@@ -209,6 +209,11 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
         tokenizer.pad_token = tokenizer.eos_token
         logging.info(f"Set pad_token = eos_token (ID: {tokenizer.eos_token_id})")
 
+    # Remove token_type_ids to prevent Llama models from throwing an error during generate()
+    if "token_type_ids" in tokenizer.model_input_names:
+        tokenizer.model_input_names.remove("token_type_ids")
+        logging.info("Removed token_type_ids from tokenizer.model_input_names")
+
     # Build explicit stop token list to eradicate conversation simulation
     stop_ids = [tokenizer.eos_token_id]
     im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
