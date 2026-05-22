@@ -70,26 +70,9 @@ def correctness_reward_func(prompts, completions, answer, **kwargs) -> list[floa
 
     Returns 1.0 for correct, 0.0 for incorrect.
     """
-    completion_ids = kwargs.get("completion_ids", None)
-    
-    # If completion_ids are available, decode them WITH special tokens preserved
-    # to ensure </think> boundaries are not stripped.
-    if completion_ids is not None:
-        try:
-            from transformers import AutoTokenizer
-            temp_tok = AutoTokenizer.from_pretrained("src/sft/sft_output/stage2/final")
-            decoded_completions = [
-                temp_tok.decode(ids, skip_special_tokens=False)
-                for ids in completion_ids
-            ]
-        except Exception:
-            decoded_completions = [_get_completion_text(c) for c in completions]
-    else:
-        decoded_completions = [_get_completion_text(c) for c in completions]
-
     rewards = []
-    for comp, gt in zip(decoded_completions, answer):
-        content = comp
+    for comp, gt in zip(completions, answer):
+        content = _get_completion_text(comp)
         
         # Isolate candidate answer strictly after </think>
         if "</think>" in content:
@@ -135,22 +118,10 @@ def format_reward_func(completions, **kwargs) -> list[float]:
     # close with </think>, followed by non-empty answer text.
     pattern = r"^\s*<think>\s*\S.*?</think>\s*\S.*"
 
-    completion_ids = kwargs.get("completion_ids", None)
-    if completion_ids is not None:
-        try:
-            from transformers import AutoTokenizer
-            temp_tok = AutoTokenizer.from_pretrained("src/sft/sft_output/stage2/final")
-            decoded_completions = [
-                temp_tok.decode(ids, skip_special_tokens=False)
-                for ids in completion_ids
-            ]
-        except Exception:
-            decoded_completions = [_get_completion_text(c) for c in completions]
-    else:
-        decoded_completions = [_get_completion_text(c) for c in completions]
-
     rewards = []
-    for i, content in enumerate(decoded_completions):
+    for i, comp in enumerate(completions):
+        content = _get_completion_text(comp)
+        
         # Log first two completions of every batch to debug
         if i < 2:
             with open("./logs/debug_completions.txt", "a") as f:
@@ -244,6 +215,19 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     logging.info(f"Loading tokenizer from {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     tokenizer.padding_side = "left"  # Crucial: MUST use left-padding for decoder-only batch generation!
+
+    # CRITICAL FIX: Remove <think> and </think> from the tokenizer's special tokens list.
+    # GRPOTrainer internally decodes completions with skip_special_tokens=True,
+    # which strips any token marked as "special". Since our reward functions need
+    # to see <think>/<think> to verify format, we demote them to regular tokens.
+    # They keep their vocabulary IDs (32000, 32001) — only the "special" flag changes.
+    original_special = tokenizer.additional_special_tokens
+    think_tokens = {"<think>", "</think>"}
+    filtered_special = [t for t in original_special if t not in think_tokens]
+    if len(filtered_special) < len(original_special):
+        tokenizer.additional_special_tokens = filtered_special
+        logging.info(f"Demoted <think>/<think> from special tokens so GRPOTrainer preserves them in decoded text")
+        logging.info(f"Remaining additional_special_tokens: {tokenizer.additional_special_tokens}")
 
     # Enforce rigid padding/EOS mapping to prevent masking errors
     if tokenizer.pad_token is None:
