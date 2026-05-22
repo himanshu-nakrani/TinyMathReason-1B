@@ -57,6 +57,12 @@ def run_custom_eval(model_path: str, output_file: str):
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
         inputs.pop("token_type_ids", None)
         
+        # Get all valid EOS token IDs (including standard EOS and <|im_end|>)
+        eos_token_ids = [tokenizer.eos_token_id or 2]
+        im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
+        if isinstance(im_end_id, int) and im_end_id > 0:
+            eos_token_ids.append(im_end_id)
+        
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
@@ -64,6 +70,7 @@ def run_custom_eval(model_path: str, output_file: str):
                 temperature=0.7,
                 do_sample=True,
                 top_p=0.9,
+                eos_token_id=eos_token_ids,
                 pad_token_id=tokenizer.eos_token_id or 2
             )
             
