@@ -214,6 +214,15 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     - Explicit stop token synchronization
     - Calibrated hyperparameters (G=8, β=0.01, lr=5e-6, cosine)
     """
+    # Clear the old debug file at startup to make sure we don't mix old logs
+    import os
+    os.makedirs("./logs", exist_ok=True)
+    if os.path.exists("./logs/debug_completions.txt"):
+        try:
+            os.remove("./logs/debug_completions.txt")
+        except Exception:
+            pass
+
     logging.info(f"Loading tokenizer from {model_path}...")
     tokenizer = AutoTokenizer.from_pretrained(model_path)
 
