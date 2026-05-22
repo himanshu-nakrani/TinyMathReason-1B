@@ -31,28 +31,23 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # ==========================================
 
 def extract_answer_gsm8k(text: str) -> str:
-    """Extract numeric answer from GSM8K '####' format or model output."""
+    """Extract final answer from the text after the </think> tag."""
+    # If the model produced a reasoning block, only look at the text after it
+    if "</think>" in text:
+        text = text.split("</think>")[-1].strip()
+    
     # GSM8K ground truth format: "... #### 42"
     if "####" in text:
         return text.split("####")[-1].strip().replace(",", "").replace(" ", "")
-    # Model may output in <answer> tags
-    answer_match = re.search(r'<answer>\s*(.*?)\s*</answer>', text, re.DOTALL)
-    if answer_match:
-        ans_text = answer_match.group(1).strip()
-        # Extract the last number from the answer block
-        numbers = re.findall(r'-?\d[\d,]*\.?\d*', ans_text)
-        if numbers:
-            return numbers[-1].replace(",", "")
-        return ans_text
-    # Fallback: boxed LaTeX
+    # Boxed LaTeX
     boxed_match = re.search(r'\\boxed{([^}]+)}', text)
     if boxed_match:
-        return boxed_match.group(1).strip().replace(",", "")
-    # Last resort: last number in text
+        return boxed_match.group(1).strip().replace(",", "").replace(" ", "")
+    # Fallback: extract the last number found in the answer section
     numbers = re.findall(r'-?\d[\d,]*\.?\d*', text)
     if numbers:
-        return numbers[-1].replace(",", "")
-    return ""
+        return numbers[-1].replace(",", "").replace(" ", "")
+    return text.strip()
 
 
 def _get_completion_text(completion) -> str:
@@ -71,26 +66,33 @@ def _get_completion_text(completion) -> str:
 def correctness_reward_func(prompts, completions, answer, **kwargs) -> list[float]:
     """
     Evaluates mathematical correctness using AST parsing (math_verify)
-    with GSM8K-specific fallback for numeric answers.
+    on the text strictly after </think>, with a GSM8K numeric fallback.
 
     Returns 1.0 for correct, 0.0 for incorrect.
     """
     rewards = []
     for comp, gt in zip(completions, answer):
         content = _get_completion_text(comp)
+        
+        # Isolate candidate answer strictly after </think>
+        if "</think>" in content:
+            pred_ans_text = content.split("</think>")[-1].strip()
+        else:
+            pred_ans_text = content
+            
         try:
             if HAS_MATH_VERIFY:
                 # Try AST-based verification first (handles fractions, LaTeX, etc.)
                 gold_parsed = parse(gt, extraction_mode="first_match",
                                     extraction_config=[LatexExtractionConfig()])
                 if gold_parsed:
-                    pred_parsed = parse(content, extraction_mode="first_match",
+                    pred_parsed = parse(pred_ans_text, extraction_mode="first_match",
                                         extraction_config=[LatexExtractionConfig()])
                     if verify(pred_parsed, gold_parsed):
                         rewards.append(1.0)
                         continue
 
-            # Fallback: GSM8K numeric extraction (handles "#### 42" format)
+            # Fallback: GSM8K numeric extraction
             pred = extract_answer_gsm8k(content)
             truth = extract_answer_gsm8k(gt)
             if pred and truth and pred == truth:
@@ -98,20 +100,20 @@ def correctness_reward_func(prompts, completions, answer, **kwargs) -> list[floa
             else:
                 rewards.append(0.0)
         except Exception:
-            # Safely handle unparseable hallucinations
+            # Safely handle unparseable exceptions
             rewards.append(0.0)
     return rewards
 
 
 def format_reward_func(completions, **kwargs) -> list[float]:
     """
-    Enforces rigid structural integrity of <think> and <answer> blocks
-    using strict regex validation. Binary reward (1.0 or 0.0) forces
-    immediate structural compliance without partial-reward gaming.
+    Enforces the actual SFT Stage 2 layout:
+    Starts with <think>, has non-empty reasoning inside, closes with </think>,
+    and has a non-empty answer following it. No <answer> tags are required.
     """
-    # Strict pattern: must start with <think>, have content, close it,
-    # then have <answer> with content. Allows flexible whitespace.
-    pattern = r"<think>\s*\S.*?</think>\s*<answer>\s*\S.*?</answer>\s*$"
+    # Pattern: Must start with <think>, contain non-empty content,
+    # close with </think>, followed by non-empty answer text.
+    pattern = r"^\s*<think>\s*\S.*?</think>\s*\S.*"
 
     rewards = []
     for comp in completions:
@@ -119,8 +121,7 @@ def format_reward_func(completions, **kwargs) -> list[float]:
         if re.search(pattern, content, re.DOTALL):
             rewards.append(1.0)
         else:
-            # Secondary check: at minimum has <think>content</think> with real content
-            # This provides a stepping stone during early training
+            # Fallback/Step-stone: at minimum has <think>...</think> with some content
             fallback = r"<think>\s*\S.{10,}?</think>"
             if re.search(fallback, content, re.DOTALL):
                 rewards.append(0.5)
