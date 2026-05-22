@@ -183,19 +183,8 @@ def repetition_penalty_func(completions, **kwargs) -> list[float]:
 
 SYSTEM_PROMPT = (
     "You are a mathematical reasoning assistant. Solve problems step by step "
-    "inside <think> tags, and then provide the final mathematical answer "
-    "inside <answer> tags."
+    "inside <think> tags, and then provide the final answer."
 )
-
-
-def format_prompt(example):
-    """Format GSM8K examples for GRPOTrainer with ChatML structure."""
-    example["prompt"] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": example["question"]}
-    ]
-    # Keep the raw 'answer' column — reward functions receive it via kwargs
-    return example
 
 
 # ==========================================
@@ -275,6 +264,20 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     model.config.eos_token_id = tokenizer.eos_token_id
 
     # Load and format dataset
+    def format_prompt(example):
+        """Format GSM8K examples for GRPOTrainer with ChatML structure."""
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": example["question"]}
+        ]
+        # Pre-tokenize/format using the global tokenizer
+        example["prompt"] = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        return example
+
     logging.info("Loading GSM8K train split for GRPO...")
     dataset = load_dataset("gsm8k", "main", split="train")
 
