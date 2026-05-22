@@ -281,6 +281,7 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
         "max_new_tokens": 512,
         "do_sample": True,
         "temperature": 0.9,  # High temperature for group diversity
+        "eos_token_id": stop_ids,  # Terminate generation at <|im_end|> or standard EOS
     }
 
     # Build GRPOConfig with hardened hyperparameters
