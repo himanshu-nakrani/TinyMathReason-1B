@@ -55,9 +55,22 @@ This document tracks our progress through the accelerated Execution Plan.
     * MMLU (5-shot): **24.60%** (Base: 23.50%) -- **+1.10% Absolute Gain** 🎉
 - [x] **Model & Log Release COMPLETE:** Model weights and all checkpoint logs uploaded to Hugging Face Hub repository: `himanshunakrani9/TinyMathReason-1B-sft`.
 - [x] **Custom Math Evaluation COMPLETE:** Verified inference with system prompt alignment and configured sampling strategies to prevent loop collapse. Ready for Phase 4.
-## Phase 4: Post-Training DPO/GRPO (Days 18-20)
-- [ ] Generate preference candidate data using Modal serverless endpoints.
-- [ ] Run DPOTrainer or GRPOTrainer.
+## Phase 4: Post-Training GRPO (Days 18-20) 🔄
+- [x] **Decision: GRPO-only** (DPO skipped — SFT baselines too low for valid preference pairs).
+- [x] Hardened `train_grpo.py` with all critical fixes:
+  * AST-based correctness verification via `math_verify` (replaces brittle string matching).
+  * Strict regex format reward (binary 1.0/0.0, not partial 0.2).
+  * N-gram repetition penalty to kill mode collapse loops.
+  * Explicit `<|im_end|>` stop token injection (prevents conversation simulation).
+  * Calibrated hyperparameters: G=8, β=0.01, lr=5e-6, cosine schedule, warmup=0.05.
+  * TRL API updated to `GRPOConfig` (>=0.17).
+  * `--max_samples` flag for staged execution.
+- [ ] Stage A: Smoke test (50 samples) on AMD MI300X.
+- [ ] Stage B: Calibration run (500 samples) + WandB monitoring.
+- [ ] Stage C: Full training run (7,473 samples, 1 epoch).
+- [ ] Mid-training evaluation gates (checkpoints 200, 500).
+- [ ] Post-GRPO full benchmark evaluation.
+- [ ] Upload GRPO model to HF Hub.
 
 ## Phase 5: Evaluation & Release (Days 21-23)
 - [ ] Run full benchmark suite at every stage (base → SFT → DPO):

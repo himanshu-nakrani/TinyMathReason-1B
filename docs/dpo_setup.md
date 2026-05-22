@@ -1,37 +1,90 @@
-# Preference Optimization (DPO / GRPO) Setup
+# Phase 4: GRPO Preference Optimization Setup
 
-For preference optimization, we split the workload between **Modal** (for scalable generation) and the **AMD MI300X** (for the memory-heavy DPO/GRPO training).
+GRPO (Group Relative Policy Optimization) is used instead of DPO because the SFT model's near-zero math baselines (GSM8K 1%, MATH 0%) make it impossible to generate valid chosen/rejected preference pairs. GRPO's online group exploration bootstraps reasoning from scratch.
 
-## 1. Candidate Generation on Modal
+## Infrastructure
 
-Modal is perfect for serverless scale-out inference.
+| Component | Resource | Purpose |
+|-----------|----------|---------|
+| Training | AMD MI300X (192GB VRAM) | GRPO trainer (policy + reference model + G=8 rollouts) |
+| Monitoring | WandB | Reward curves, KL divergence, loss tracking |
 
-1. **Install Modal locally:**
+## Dependencies
+
 ```bash
-pip install modal
-modal setup
+pip install trl>=0.17.0 math-verify vllm sympy wandb
 ```
 
-2. **Upload SFT Model to Modal Volume:**
+> **Note:** MI300X uses ROCm. If `vllm` is unstable on ROCm, the script falls back to native HF generation (192GB handles G=8 comfortably without vLLM).
+
+## Staged Execution
+
+### Stage A: Smoke Test (~10 min)
 ```bash
-modal volume create tinymath-models
-modal volume put tinymath-models ./sft_output/final /sft-model
+python src/dpo/train_grpo.py \
+  --model_path ./models/sft-1.1b-math \
+  --output_dir ./outputs/grpo-smoke \
+  --max_samples 50
 ```
 
-3. **Run Candidate Generation:**
-Use the `src/dpo/generate_preferences.py` script packaged in a Modal app to rapidly generate candidate solutions for your math problems. Then download the resulting `dpo_dataset` back to your AMD instance.
+Verify: no OOM, WandB logging, non-zero rewards, no conversation simulation.
 
-## 2. Training on AMD MI300X
+### Stage B: Calibration (~1-2 hours)
+```bash
+python src/dpo/train_grpo.py \
+  --model_path ./models/sft-1.1b-math \
+  --output_dir ./outputs/grpo-calibration \
+  --max_samples 500
+```
 
-DPO requires running two models simultaneously (policy and reference). The MI300X's 192GB VRAM is perfect for this, allowing you to avoid slow CPU-offloading.
+Monitor on WandB:
+- `reward/correctness` — should slowly increase from ~0
+- `reward/format` — should climb to ~0.8+ within 50 steps
+- `reward/repetition` — should stay near 0
+- `kl_divergence` — should stay < 5.0
+
+### Stage C: Full Training (~4-8 hours)
+```bash
+python src/dpo/train_grpo.py \
+  --model_path ./models/sft-1.1b-math \
+  --output_dir ./outputs/grpo-full
+```
+
+### Optional: vLLM Acceleration
+```bash
+python src/dpo/train_grpo.py \
+  --model_path ./models/sft-1.1b-math \
+  --output_dir ./outputs/grpo-full \
+  --use_vllm
+```
+
+## Key Hyperparameters
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| `num_generations` (G) | 8 | Minimum for stable advantage normalization |
+| `beta` (KL) | 0.01 | Protects MMLU/ARC gains while allowing math exploration |
+| `learning_rate` | 5e-6 | Escapes 0% MATH local minimum |
+| `lr_scheduler` | cosine | Smooth convergence |
+| `warmup_ratio` | 0.05 | Gentle ramp-up for high-variance gradients |
+
+## Reward Functions
+
+1. **`correctness_reward_func`** — AST-based math verification via `math_verify` + GSM8K numeric fallback
+2. **`format_reward_func`** — Strict regex validation of `<think>...</think><answer>...</answer>` structure
+3. **`repetition_penalty_func`** — 3-gram uniqueness check to kill mode collapse loops (penalty: -1.5)
+
+## Post-Training Evaluation
 
 ```bash
-# SSH into your AMD MI300X instance
-source ~/sft_env/bin/activate
+# Quick checkpoint eval
+python src/eval/run_custom_eval.py \
+  --model_path ./outputs/grpo-full/checkpoint-200 \
+  --output_file ./eval_results/grpo_ckpt200.md
 
-# For DPO:
-python src/dpo/train_dpo.py --model_path ./sft_output/final --dataset_path ./dpo_dataset
+# Full benchmark suite
+python src/eval/run_benchmarks.py --model_path ./outputs/grpo-full/final
 
-# For GRPO (DeepSeek-R1 style):
-python src/dpo/train_grpo.py --model_path ./sft_output/final
+# Upload to HF Hub
+huggingface-cli upload himanshunakrani9/TinyMathReason-1B-grpo ./outputs/grpo-full/final
 ```
