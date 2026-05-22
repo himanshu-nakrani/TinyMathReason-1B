@@ -227,7 +227,7 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2"
+        attn_implementation="sdpa"
     )
 
     # Synchronize model config with tokenizer special tokens
