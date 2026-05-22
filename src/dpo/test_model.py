@@ -37,6 +37,7 @@ def test_model():
     logging.info(f"Prompt text:\n{repr(prompt)}")
     
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    inputs.pop("token_type_ids", None)  # Prevent transformers generation error
     logging.info(f"Tokenized prompt IDs: {inputs.input_ids[0].tolist()}")
     
     # Get stop tokens
