@@ -216,18 +216,27 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     tokenizer.padding_side = "left"  # Crucial: MUST use left-padding for decoder-only batch generation!
 
-    # CRITICAL FIX: Remove <think> and </think> from the tokenizer's special tokens list.
+    # CRITICAL FIX: Monkey-patch tokenizer.decode to preserve <think>/<think> tags.
     # GRPOTrainer internally decodes completions with skip_special_tokens=True,
-    # which strips any token marked as "special". Since our reward functions need
-    # to see <think>/<think> to verify format, we demote them to regular tokens.
-    # They keep their vocabulary IDs (32000, 32001) — only the "special" flag changes.
-    original_special = tokenizer.additional_special_tokens
-    think_tokens = {"<think>", "</think>"}
-    filtered_special = [t for t in original_special if t not in think_tokens]
-    if len(filtered_special) < len(original_special):
-        tokenizer.additional_special_tokens = filtered_special
-        logging.info(f"Demoted <think>/<think> from special tokens so GRPOTrainer preserves them in decoded text")
-        logging.info(f"Remaining additional_special_tokens: {tokenizer.additional_special_tokens}")
+    # which strips ALL tokens marked as "special" — including <think>/<think>.
+    # For PreTrainedTokenizerFast, modifying additional_special_tokens does NOT
+    # update the Rust backend's internal special token set. So we patch decode()
+    # to decode raw, then manually strip only the ChatML control tokens.
+    _tokens_to_strip = [t for t in tokenizer.all_special_tokens if t not in ("<think>", "</think>")]
+    _orig_decode = tokenizer.decode
+
+    def _think_preserving_decode(token_ids, skip_special_tokens=False, **kwargs):
+        """Decode that preserves <think>/<think> even when skip_special_tokens=True."""
+        if not skip_special_tokens:
+            return _orig_decode(token_ids, skip_special_tokens=False, **kwargs)
+        # Decode raw (all tokens visible), then manually strip only control tokens
+        raw = _orig_decode(token_ids, skip_special_tokens=False, **kwargs)
+        for token in _tokens_to_strip:
+            raw = raw.replace(token, "")
+        return raw
+
+    tokenizer.decode = _think_preserving_decode
+    logging.info(f"Patched tokenizer.decode to preserve <think>/<think> (stripping: {_tokens_to_strip})")
 
     # Enforce rigid padding/EOS mapping to prevent masking errors
     if tokenizer.pad_token is None:
