@@ -311,7 +311,7 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
         return example
 
     logging.info("Loading GSM8K train split for GRPO...")
-    dataset = load_dataset("gsm8k", "main", split="train")
+    dataset = load_dataset("openai/gsm8k", "main", split="train")
 
     if max_samples and max_samples < len(dataset):
         dataset = dataset.select(range(max_samples))
