@@ -2,6 +2,15 @@ import argparse
 import logging
 import re
 import torch
+import numpy
+try:
+    torch.serialization.add_safe_globals([
+        numpy.core.multiarray._reconstruct,
+        numpy.dtype,
+        numpy.ndarray
+    ])
+except Exception:
+    pass
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
