@@ -2,15 +2,14 @@ import argparse
 import logging
 import re
 import torch
-import numpy
-try:
-    torch.serialization.add_safe_globals([
-        numpy.core.multiarray._reconstruct,
-        numpy.dtype,
-        numpy.ndarray
-    ])
-except Exception:
-    pass
+# CRITICAL FIX: Monkey-patch torch.load to default to weights_only=False.
+# In PyTorch 2.6+, weights_only=True is the default. When loading checkpoints,
+# this blocks unpickling of RNG state files that contain NumPy arrays.
+_orig_torch_load = torch.load
+def _safe_torch_load(*args, **kwargs):
+    kwargs['weights_only'] = False
+    return _orig_torch_load(*args, **kwargs)
+torch.load = _safe_torch_load
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
