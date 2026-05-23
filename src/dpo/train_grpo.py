@@ -361,10 +361,16 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     # vLLM integration (optional — may not work on ROCm/MI300X)
     if use_vllm:
         logging.info("Enabling vLLM colocate mode for high-throughput generation")
+        # Clean up generation_kwargs for vLLM compatibility (vLLM's SamplingParams does not accept max_new_tokens/do_sample/eos_token_id)
+        vllm_generation_kwargs = {
+            "temperature": generation_kwargs.get("temperature", 0.9),
+            "stop_token_ids": generation_kwargs.get("eos_token_id", []),
+        }
         config_kwargs.update(
             use_vllm=True,
             vllm_mode="colocate",
             vllm_gpu_memory_utilization=0.3,   # Conservative — PyTorch needs the rest
+            generation_kwargs=vllm_generation_kwargs,
         )
     else:
         logging.info("Using native HF generation (MI300X 192GB has ample headroom for G=8)")
