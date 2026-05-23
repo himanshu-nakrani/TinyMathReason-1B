@@ -349,7 +349,6 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
             use_vllm=True,
             vllm_mode="colocate",
             vllm_gpu_memory_utilization=0.3,   # Conservative — PyTorch needs the rest
-            vllm_enable_sleep_mode=True,        # Offload vLLM to CPU RAM during backward
         )
     else:
         logging.info("Using native HF generation (MI300X 192GB has ample headroom for G=8)")
