@@ -235,14 +235,22 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     _orig_decode = tokenizer.decode
 
     def _think_preserving_decode(token_ids, skip_special_tokens=False, **kwargs):
-        """Decode that preserves <think>/<think> even when skip_special_tokens=True."""
+        """Decode that preserves <think>/</think> even when skip_special_tokens=True."""
         if not skip_special_tokens:
             return _orig_decode(token_ids, skip_special_tokens=False, **kwargs)
         # Decode raw (all tokens visible), then manually strip only control tokens
         raw = _orig_decode(token_ids, skip_special_tokens=False, **kwargs)
-        for token in _tokens_to_strip:
-            raw = raw.replace(token, "")
-        return raw
+        
+        def _clean(text):
+            if not isinstance(text, str):
+                return text
+            for token in _tokens_to_strip:
+                text = text.replace(token, "")
+            return text
+
+        if isinstance(raw, list):
+            return [_clean(item) for item in raw]
+        return _clean(raw)
 
     tokenizer.decode = _think_preserving_decode
     logging.info(f"Patched tokenizer.decode to preserve <think>/<think> (stripping: {_tokens_to_strip})")
