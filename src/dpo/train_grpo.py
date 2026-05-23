@@ -192,7 +192,8 @@ SYSTEM_PROMPT = (
 # ==========================================
 
 def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
-               num_epochs: int = 1, use_vllm: bool = False):
+               num_epochs: int = 1, use_vllm: bool = False,
+               resume_from_checkpoint: bool = False):
     """
     Trains using Group Relative Policy Optimization (GRPO).
 
@@ -384,7 +385,7 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     logging.info(f"  math_verify: {'available' if HAS_MATH_VERIFY else 'NOT available (string fallback)'}")
     logging.info("=" * 60)
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     # Save final model and tokenizer
     final_path = f"{output_dir}/final"
@@ -406,6 +407,8 @@ if __name__ == "__main__":
                         help="Number of training epochs")
     parser.add_argument("--use_vllm", action="store_true",
                         help="Enable vLLM colocate mode (requires vLLM with ROCm support)")
+    parser.add_argument("--resume_from_checkpoint", action="store_true",
+                        help="Resume training from the latest checkpoint in output_dir")
     args = parser.parse_args()
 
     train_grpo(
@@ -414,4 +417,5 @@ if __name__ == "__main__":
         max_samples=args.max_samples,
         num_epochs=args.num_train_epochs,
         use_vllm=args.use_vllm,
+        resume_from_checkpoint=args.resume_from_checkpoint,
     )
