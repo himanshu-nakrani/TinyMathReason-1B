@@ -340,8 +340,8 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     config_kwargs = dict(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=8,   # Effective batch = 8
+        per_device_train_batch_size=8,
+        gradient_accumulation_steps=1,   # Effective batch = 8
         learning_rate=5e-6,              # Accelerated LR to escape 0% MATH baseline
         lr_scheduler_type="cosine",      # Smooth long-tail annealing
         warmup_ratio=0.05,               # Gentle ramp-up for high-variance GRPO gradients
