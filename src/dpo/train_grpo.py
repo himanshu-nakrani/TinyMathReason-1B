@@ -346,7 +346,6 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
         run_name="tinymath-1b-grpo",
         gradient_checkpointing=False,
         num_generations=8,               # G=8: minimum for stable advantage normalization
-        max_prompt_length=256,
         max_completion_length=512,
         generation_kwargs=generation_kwargs,
     )
