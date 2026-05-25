@@ -340,8 +340,8 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
     config_kwargs = dict(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
-        per_device_train_batch_size=8,
-        gradient_accumulation_steps=1,   # Effective batch = 8
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=4,   # Effective batch = 8
         learning_rate=5e-6,              # Accelerated LR to escape 0% MATH baseline
         lr_scheduler_type="cosine",      # Smooth long-tail annealing
         warmup_ratio=0.05,               # Gentle ramp-up for high-variance GRPO gradients
@@ -352,7 +352,7 @@ def train_grpo(model_path: str, output_dir: str, max_samples: int = None,
         bf16=True,
         report_to="wandb",
         run_name="tinymath-1b-grpo",
-        gradient_checkpointing=False,
+        gradient_checkpointing=True,
         num_generations=8,               # G=8: minimum for stable advantage normalization
         max_completion_length=512,
         generation_kwargs=generation_kwargs,
