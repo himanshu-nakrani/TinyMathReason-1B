@@ -26,6 +26,10 @@ GRPO (Group Relative Policy Optimization) was applied to the SFT model to improv
 | :--- | :--- | :---: | :---: | :---: |
 | **GSM8K** | Exact Match | 1.0% | 1.0% | **2.2% (Flex)** |
 | **Minerva Math** | Math Verify | 0.0% | 0.0% | **2.0%** |
+| **ARC-Easy** | Acc Norm | 29.9% | 25.5% | **28.8%** |
+| **ARC-Challenge** | Acc Norm | 21.7% | 24.7% | **22.8%** |
+| **HellaSwag** | Acc Norm | 25.8% | 26.7% | **26.3%** |
+| **MMLU** | Accuracy | 23.5% | 24.6% | **23.6%** |
 
 ## Qualitative Analysis
 ### Strengths

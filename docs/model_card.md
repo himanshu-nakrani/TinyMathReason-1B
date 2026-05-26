@@ -66,9 +66,9 @@ The GRPO variant was trained using Group Relative Policy Optimization to improve
 | :--- | :---: | :---: | :---: |
 | **GSM8K** (8-shot) | 1.0% | 1.0% | **2.2%** (Flex) |
 | **Minerva Math** (4-shot) | 0.0% | 0.0% | **2.0%** |
-| **ARC-Challenge** (25-shot) | 21.7% | 24.7% | TBD |
-| **MMLU** (5-shot) | 23.5% | 24.6% | TBD |
-| **HellaSwag** (10-shot) | 25.8% | 26.7% | TBD |
+| **ARC-Challenge** (25-shot) | 21.7% | 24.7% | **22.8%** |
+| **MMLU** (5-shot) | 23.5% | 24.6% | **23.6%** |
+| **HellaSwag** (10-shot) | 25.8% | 26.7% | **26.3%** |
 
 ## Intended Uses & Limitations
 
