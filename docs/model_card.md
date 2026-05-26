@@ -7,7 +7,8 @@ tags:
 - reasoning
 - jax
 - pytorch
-- dpo
+- grpo
+- rl
 datasets:
 - HuggingFaceFW/fineweb-edu
 - open-web-math/open-web-math
@@ -21,11 +22,11 @@ metrics:
 
 # TinyMathReason-1B
 
-TinyMathReason-1B is a 1.12 Billion parameter Llama-style decoder-only transformer trained from scratch specifically for mathematical reasoning. This repository contains the [Base / SFT / DPO] variant.
+TinyMathReason-1B is a 1.12 Billion parameter Llama-style decoder-only transformer trained from scratch specifically for mathematical reasoning. This repository contains the [Base / SFT / GRPO] variant.
 
 ## Model Description
 
-- **Developed by:** [Your Name]
+- **Developed by:** Himanshu Nakrani
 - **Model type:** Decoder-only Transformer
 - **Language(s):** English, Mathematics, Code
 - **License:** Apache 2.0
@@ -37,9 +38,9 @@ TinyMathReason-1B is a 1.12 Billion parameter Llama-style decoder-only transform
 
 ### Pretraining (Base Model)
 The base model was trained from a random initialization on Google Cloud TPU v4-32 using the [MaxText](https://github.com/google/maxtext) framework.
-- **Tokens:** ~300 Billion
+- **Tokens:** ~57 Billion (Run 11 Rerun)
 - **Optimizer:** AdamW (β1=0.9, β2=0.95, weight_decay=0.1)
-- **Learning Rate:** 3e-4 peak, cosine decay to 3e-5
+- **Learning Rate:** 3e-4 peak, cosine decay
 - **Data Mix:** 
   - 40% FineWeb-Edu
   - 35% OpenWebMath
@@ -47,40 +48,38 @@ The base model was trained from a random initialization on Google Cloud TPU v4-3
   - 10% Stack-Edu (Code)
 
 ### Supervised Fine-Tuning (SFT)
-The SFT variant was trained on ~600k instruction-following mathematical examples formatted in ChatML.
-- **Hardware:** 1x A100 GPU using PyTorch + TRL
+The SFT variant was trained on reasoning traces (MathInstruct, MetaMathQA) formatted in ChatML.
+- **Hardware:** 1x AMD MI300X GPU using PyTorch + TRL
 - **Learning Rate:** 2e-5 (Cosine schedule)
 - **Epochs:** 2
 
-### Preference Optimization (DPO)
-The DPO variant was trained using Direct Preference Optimization on a dataset of 10k generated pairs from GSM8K.
-- **Hardware:** 1x A100 GPU using PyTorch + TRL
-- **Learning Rate:** 5e-7
-- **Beta:** 0.1
+### Group Relative Policy Optimization (GRPO)
+The GRPO variant was trained using Group Relative Policy Optimization to improve reasoning traces and rule-based correctness.
+- **Hardware:** 1x NVIDIA L4 GPU using PyTorch + TRL
+- **Learning Rate:** 5e-6
+- **Beta:** 0.01
+- **Group Size (G):** 8
 
 ## Evaluation Results
 
-*(Note: Replace TBD with actual metrics after running `run_benchmarks.py`)*
-
-| Benchmark | Base Model | SFT Model | DPO Model |
+| Benchmark | Base Model | SFT Model | **GRPO Model** |
 | :--- | :---: | :---: | :---: |
-| **GSM8K** (8-shot) | TBD% | TBD% | TBD% |
-| **MATH** (4-shot) | TBD% | TBD% | TBD% |
-| **ARC-Challenge** | TBD% | TBD% | TBD% |
-| **MMLU** (5-shot) | TBD% | TBD% | TBD% |
-| **HellaSwag** | TBD% | TBD% | TBD% |
+| **GSM8K** (8-shot) | 1.0% | 1.0% | **2.2%** (Flex) |
+| **Minerva Math** (4-shot) | 0.0% | 0.0% | **2.0%** |
+| **ARC-Challenge** (25-shot) | 21.7% | 24.7% | TBD |
+| **MMLU** (5-shot) | 23.5% | 24.6% | TBD |
+| **HellaSwag** (10-shot) | 25.8% | 26.7% | TBD |
 
 ## Intended Uses & Limitations
 
 **Intended Uses:**
 - Solving step-by-step grade-school to high-school level math problems.
 - Educational assistance and logic-based chain-of-thought generation.
-- As a foundation for further fine-tuning in scientific domains.
 
 **Limitations:**
 - Being a 1B parameter model, it lacks the broad general knowledge of larger models.
 - Prone to arithmetic hallucination on very large numbers.
-- May fail on complex topology or advanced undergraduate mathematics.
+- GRPO traces often contain repetitive phrases or mode collapse loops.
 
 ## Environmental Impact
 

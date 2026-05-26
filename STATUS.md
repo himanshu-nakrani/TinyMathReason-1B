@@ -67,10 +67,19 @@ This document tracks our progress through the accelerated Execution Plan.
   * `--max_samples` flag for staged execution.
 - [ ] Stage A: Smoke test (50 samples) on AMD MI300X.
 - [ ] Stage B: Calibration run (500 samples) + WandB monitoring.
-- [ ] Stage C: Full training run (7,473 samples, 1 epoch).
-- [ ] Mid-training evaluation gates (checkpoints 200, 500).
-- [ ] Post-GRPO full benchmark evaluation.
-- [ ] Upload GRPO model to HF Hub.
+- [x] Stage C: Full training run (22,419 steps, 3 epochs) COMPLETE.
+  * **Final GRPO Metrics:**
+    * Reward (Total): **0.5139**
+    * Correctness Reward: **0.01389**
+    * Format Reward: **0.50**
+    * KL Divergence: **2.975**
+    * Entropy: **4.679**
+    * Completed on: 2026-05-26
+- [x] Post-GRPO full benchmark evaluation COMPLETE.
+  * GSM8K (8-shot): **2.2%** (Flex Match)
+  * Minerva Math (4-shot): **2.0%** (Math Verify)
+- [x] Upload GRPO model to HF Hub COMPLETE.
+  * URL: [https://huggingface.co/himanshunakrani9/TinyMathReason-1B-grpo](https://huggingface.co/himanshunakrani9/TinyMathReason-1B-grpo)
 
 ## Phase 5: Evaluation & Release (Days 21-23)
 - [ ] Run full benchmark suite at every stage (base → SFT → DPO):
