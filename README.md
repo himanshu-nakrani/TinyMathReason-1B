@@ -6,8 +6,6 @@
 [![Pretraining](https://img.shields.io/badge/Pretraining-TPU_v4--64-orange.svg)]()
 [![Post--Training](https://img.shields.io/badge/Post--Training-AMD_MI300X%20%2B%20Modal-blue.svg)]()
 
-![TinyMathReason-1B](images/48fd7e0f-3087-4ca1-8ca5-8a9b5a9972c0.png)
-
 **TinyMathReason-1B is a 1.12B-parameter decoder-only transformer trained from scratch for mathematical reasoning.**
 
 The goal of this project is not just to ship a small math model, but to build and document the full end-to-end LLM stack: data curation, tokenizer training, TPU pretraining, checkpoint conversion, supervised fine-tuning, preference optimization, and evaluation. The repository is designed both as a reproducible engineering artifact and as a learning-focused reference for anyone studying how modern language models are built.
@@ -33,8 +31,6 @@ Seven stages, about 40 days of wall time, hybrid CPU/TPU/GPU infrastructure.
 │  (15h)       │   │  (13.5h)   │   │  + custom    │
 └──────────────┘   └────────────┘   └──────────────┘
 ```
-
-![End-to-end LLM training pipeline](images/334d3329-ed8e-4cb8-9910-b8f4397828eb.png)
 
 ## Why this repo exists
 
@@ -64,7 +60,37 @@ If you are learning ML systems hands-on, this repo is meant to be useful as both
 
 TinyMathReason-1B uses a Llama-style decoder-only transformer optimized for compact reasoning workloads. The architecture deliberately mirrors TinyLlama so the **pipeline** stays the variable under test, not the model shape. The one intentional deviation is head dimension (128 instead of 64), following Llama-3's finding that wider heads capture richer relationships — useful when tracking variables across a derivation.
 
-![TinyMathReason-1B architecture](images/816ee6c2-0899-4778-bf37-68ce84ae80f6.png)
+```text
+                   TinyMathReason-1B
+                   ════════════════
+                       1.12B parameters
+
+       Input tokens → [Embedding 32k × 2048]
+                              │
+                              ▼
+            ┌─────────────────────────────────┐
+            │  Transformer Layer × 22         │
+            │  ┌───────────────────────────┐  │
+            │  │ RMSNorm                   │  │
+            │  │ ↓                         │  │
+            │  │ GQA (16 Q heads, 4 KV)    │  │ ◄── 4:1 ratio
+            │  │ ↓ + residual              │  │     shrinks KV cache 4×
+            │  │ RMSNorm                   │  │
+            │  │ ↓                         │  │
+            │  │ SwiGLU MLP (5632 dim)     │  │
+            │  │ ↓ + residual              │  │
+            │  └───────────────────────────┘  │
+            └─────────────────────────────────┘
+                              │
+                              ▼
+                       [Final RMSNorm]
+                              │
+                              ▼
+                       [LM Head 2048 × 32k]
+                              │
+                              ▼
+                      Output logits
+```
 
 | Component | Value |
 |---|---|
@@ -107,8 +133,6 @@ Current pipeline progress (verified via `STATUS.md`):
 
 ### Benchmark performance comparison
 
-![Benchmark comparison across training stages](images/39f4944a-937e-44cb-9d21-045744264147.png)
-
 | Benchmark | Setting | Base Score | SFT Score | **GRPO Score (Final)** |
 |---|---|:---:|:---:|:---:|
 | **GSM8K** | 8-shot (Template-aligned) | 1.00% | 1.00% | **2.20%** (Flex) 🚀 |
@@ -137,7 +161,44 @@ Main file:
 
 The pretraining corpus is downloaded, cleaned, filtered, mixed, tokenized, packed, sharded, and uploaded for TPU training. The full pipeline ran in parallel across two Vultr `c2-standard-30` CPU nodes and produced ~1000 shards (~50MB compressed each) totaling **~57 billion tokens**.
 
-![Data processing pipeline](images/4cc5edfc-2907-4b08-8a76-02b4a50ff5a4.png)
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│                       DATA PIPELINE                              │
+└──────────────────────────────────────────────────────────────────┘
+
+   ┌────────────────┐
+   │  a_download    │   Stream datasets from HuggingFace
+   │                │   FineWeb-Edu | OpenWebMath | MathPile | Stack-Edu
+   └───────┬────────┘
+           │
+           ▼
+   ┌────────────────┐
+   │ b_clean_filter │   word_count > 20, alpha_ratio > 0.3
+   │                │   hash-based dedup
+   └───────┬────────┘
+           │
+           ▼
+   ┌────────────────┐
+   │   c_mix        │   Weighted interleave, dataset folders → ratios
+   │                │   Auto-normalizes from disk contents
+   └───────┬────────┘
+           │
+           ▼
+   ┌────────────────┐
+   │ d_tokenize     │   Tokenize, concat with EOS,
+   │ _and_pack      │   pack into 4096-token sequences
+   └───────┬────────┘
+           │
+           ▼
+   ┌────────────────┐
+   │  e_shards      │   Split into ~50MB .jsonl.zst shards
+   └───────┬────────┘
+           │
+           ▼
+   ┌────────────────┐
+   │  f_upload      │   rsync to GCS bucket for TPU consumption
+   └────────────────┘
+```
 
 Pipeline files:
 - `src/data/pipeline/a_download_datasets.py`
@@ -153,7 +214,26 @@ Pipeline files:
 
 Pretraining is run with MaxText on Google Cloud TPU v4-64 hardware (64 chips across 8 host VMs) via the **TPU Research Cloud** grant program. The repo includes configuration, monitoring, and preemption-handling utilities to support long-running preemptible TPU jobs.
 
-![TPU v4-64 pretraining](images/058156df-5f94-4c78-a480-5c4ff3ff49b4.png)
+```text
+                       TPU v4-64 topology
+                       ═══════════════════
+
+              ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐
+              │ Host │ │ Host │ │ Host │ │ Host │
+              │  0   │ │  1   │ │  2   │ │  3   │
+              │ 8 ch │ │ 8 ch │ │ 8 ch │ │ 8 ch │
+              └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘
+                 │        │        │        │
+              ───┴────────┴────────┴────────┴───  high-speed mesh
+                 │        │        │        │
+              ┌──┴───┐ ┌──┴───┐ ┌──┴───┐ ┌──┴───┐
+              │ Host │ │ Host │ │ Host │ │ Host │
+              │  4   │ │  5   │ │  6   │ │  7   │
+              └──────┘ └──────┘ └──────┘ └──────┘
+
+         64 chips total. Single JAX distributed mesh.
+         If one host reboots → entire mesh collapses.
+```
 
 Run stats:
 - **Throughput:** ~8,900 tokens/sec/chip (~66 TFLOP/s/device)
@@ -174,7 +254,27 @@ Main files:
 
 The pretrained checkpoint is converted from Orbax/JAX format into Hugging Face-compatible safetensors. These are not just different file formats — they are different *tensor layouts* with different scaling conventions. Budgeted as one day, it took five.
 
-![Orbax to HuggingFace checkpoint conversion](images/484d0375-2e34-433e-805b-aaf48550e3a4.png)
+```text
+   MaxText/Orbax checkpoint               HuggingFace safetensors
+   ════════════════════════               ═══════════════════════
+
+   ┌──────────────────────┐               ┌──────────────────────┐
+   │ params/              │               │ model.embed_tokens.  │
+   │  decoder/            │               │   weight             │
+   │   layers/            │               │ model.layers.0.      │
+   │    self_attention/   │   convert     │   self_attn.q_proj.  │
+   │     query/kernel ◄───┤   ────────▶   │   weight             │
+   │     key/kernel       │               │ model.layers.0.      │
+   │     value/kernel     │               │   self_attn.k_proj.  │
+   │     out/kernel       │               │   weight             │
+   │    mlp/...           │               │ ...                  │
+   │  embedder/...        │               │                      │
+   └──────────────────────┘               └──────────────────────┘
+   ▲ Stacked layers in       ▲ Per-layer tensors. RoPE
+     single array. Query       interleaving differs. Q
+     scaling baked into        scaling applied at runtime.
+     weights at save time.
+```
 
 The five bugs that ate the week:
 
@@ -199,7 +299,41 @@ A two-stage post-training SFT curriculum on AMD MI300X (via the AMD Developer Cl
 - **Stage 1 (Conversational Prior):** ~52k Alpaca examples to align base output forms.
 - **Stage 2 (Reasoning Traces):** resized token embeddings for `<think>` / `</think>`, then ~662k math examples (MetaMathQA ~395k + MathInstruct ~260k + GSM8K train ~7.5k), ChatML-wrapped, two epochs.
 
-![Supervised fine-tuning](images/dc05f24d-0c03-4db4-af02-93fde0de2259.png)
+```text
+              SFT data flow
+              ═════════════
+
+  Raw dataset (GSM8K, MathInstruct, MetaMathQA)
+              │
+              ▼
+  ┌────────────────────────┐
+  │ prepare_sft_data.py    │
+  │  - extract Q & A       │
+  │  - wrap reasoning in   │
+  │    <think>...</think>  │
+  │  - apply ChatML        │
+  └────────────┬───────────┘
+               │
+               ▼
+  ChatML-formatted text:
+  ┌──────────────────────────────────────────────────┐
+  │ <|im_start|>system                               │
+  │ You are a math assistant...                      │
+  │ <|im_end|>                                       │
+  │ <|im_start|>user                                 │
+  │ What's 12 × 13?                                  │
+  │ <|im_end|>                                       │
+  │ <|im_start|>assistant                            │
+  │ <think>12 × 13 = 12 × 10 + 12 × 3 = 120 + 36 ... │
+  │ </think>156<|im_end|>                            │
+  └──────────────────────────────────────────────────┘
+               │
+               ▼
+        SFTTrainer (TRL)
+               │
+               ▼
+        Fine-tuned model
+```
 
 > **Three things worth changing next time:**
 > - Set `assistant_only_loss=True` — otherwise loss is computed over the system prompt and user question too, wasting more than half of every gradient on boilerplate.
@@ -216,7 +350,32 @@ Main files:
 
 The repo includes both DPO and GRPO training flows. **GRPO was chosen over DPO** because at ~1% SFT correctness, almost every preference pair would be "rejected vs. rejected" — no signal. GRPO works with absolute, rule-based rewards instead: generate G=8 completions per prompt, reward correctness + format, and reinforce above-average completions relative to the group mean. No value network, no critic.
 
-![GRPO reinforcement learning](images/741a1ddc-f34f-40c3-a8ee-7e6ed8e871c9.png)
+```text
+            GRPO in one diagram
+            ═══════════════════
+
+Prompt: "What's 12 × 13?"
+                │
+                ▼  generate G=8 different completions
+         ┌──────────────────────────────────────────┐
+         │ Completion 1: ... = 156  ✓  reward = 1.0 │
+         │ Completion 2: ... = 144  ✗  reward = 0.0 │
+         │ Completion 3: ... = 156  ✓  reward = 1.0 │
+         │ Completion 4: ... = 169  ✗  reward = 0.0 │
+         │ Completion 5: ... = 156  ✓  reward = 1.0 │
+         │ Completion 6: ... = 130  ✗  reward = 0.0 │
+         │ Completion 7: ... = 156  ✓  reward = 1.0 │
+         │ Completion 8: ... = 156  ✓  reward = 1.0 │
+         └─────────────────┬────────────────────────┘
+                           │
+                           ▼
+         Mean reward in this group: 0.625
+         Advantage per sample: reward - 0.625
+                           │
+                           ▼
+         Reinforce above-average completions
+         Suppress below-average completions
+```
 
 Hardened reward stack:
 - AST-based correctness verification via `math_verify` (replaces brittle string matching)
@@ -235,8 +394,6 @@ Main files:
 
 Evaluation scripts cover benchmark execution, custom evaluation, curve plotting, and model comparison across every stage (base → SFT → GRPO).
 
-![Evaluation and benchmarking](images/6c8b21ee-8083-438b-af5c-4aefbd2ec13d.png)
-
 Main files:
 - `src/eval/run_benchmarks.py`
 - `src/eval/run_custom_eval.py`
@@ -247,8 +404,6 @@ Main files:
 ## Data mixture
 
 The project combines general educational text with math-heavy data so the model learns both broad language structure and domain-specific mathematical patterns.
-
-![Pretraining data mixture](images/f5d4beb3-0f50-49e1-bc80-97aa9e70884d.png)
 
 | Dataset | Share | Role |
 |---|:---:|---|
@@ -264,8 +419,6 @@ The processed pretraining corpus is approximately 57B tokens in the currently do
 
 This project spans multiple compute environments across the training lifecycle — and every piece of it was covered by a research-credit or trial program.
 
-![Hybrid CPU/TPU/GPU infrastructure](images/b437bf98-cbf2-4ebf-be6d-730528b389f0.png)
-
 | Stage | Infrastructure | Funding |
 |---|---|---|
 | Tokenizer / local development | local machine | — |
@@ -274,6 +427,24 @@ This project spans multiple compute environments across the training lifecycle �
 | SFT | AMD MI300X (192GB VRAM) | AMD Developer Cloud credits |
 | Preference generation | Modal | trial credits |
 | Final evaluation / comparisons | Lightning AI + Thunder Compute | trial credits |
+
+GRPO alone hopped across three different GPUs because of quota limits, resuming cleanly from checkpoints each time:
+
+```text
+        GRPO infrastructure migration
+        ═════════════════════════════
+
+  Steps 0 ────────── 12,500 ────────── 19,000 ────────── 22,419
+        │              │                  │                │
+        ▼              ▼                  ▼                ▼
+  ┌──────────┐    ┌──────────┐      ┌──────────┐    ┌──────────┐
+  │ AMD      │    │   HF     │      │ AMD      │    │  GCP     │
+  │ MI300X   │ ─▶ │   Hub    │ ──▶  │ MI300X   │ ──▶│ 2× L4    │
+  │ #1       │    │ (resume) │      │ #2       │    │ (CUDA)   │
+  └──────────┘    └──────────┘      └──────────┘    └──────────┘
+   quota out      checkpoint         vLLM/ROCm       ROCm→CUDA
+   → SIGINT       backed up          conflicts       hop, works!
+```
 
 This makes the repo useful not only as a model-training project, but also as a practical example of hybrid infra orchestration across CPUs, TPUs, and GPUs — at near-zero cost.
 
@@ -356,8 +527,6 @@ Supporting docs:
 - `docs/execution_plan.md`
 
 ## Why the pretrained baseline matters
-
-![Capabilities emerging across training stages](images/0df122e2-9415-4eea-b61b-20e1e8198918.png)
 
 One of the most instructive parts of this repository is that it does not hide the weak pretrained baseline. For a reasoning model, the jump from base pretraining to SFT and then to preference optimization is the story. Keeping the base metrics visible makes the later improvements measurable and honest.
 
