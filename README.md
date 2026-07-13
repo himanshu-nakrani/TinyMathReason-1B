@@ -1,10 +1,16 @@
-# TinyMathReason-1B 🧮
+<p align="center">
+  <img src="assets/header.svg" alt="TinyMathReason-1B — 1.12B-parameter mathematical reasoning model trained from scratch" width="100%"/>
+</p>
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Parameters](https://img.shields.io/badge/Parameters-1.12B-green.svg)]()
-[![Architecture](https://img.shields.io/badge/Architecture-Llama--style-purple.svg)]()
-[![Pretraining](https://img.shields.io/badge/Pretraining-TPU_v4--64-orange.svg)]()
-[![Post--Training](https://img.shields.io/badge/Post--Training-AMD_MI300X%20%2B%20Modal-blue.svg)]()
+<p align="center">
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"/></a>
+  <img src="https://img.shields.io/badge/Parameters-1.12B-green.svg" alt="Parameters"/>
+  <img src="https://img.shields.io/badge/Architecture-Llama--style-purple.svg" alt="Architecture"/>
+  <img src="https://img.shields.io/badge/Pretraining-TPU_v4--64-orange.svg" alt="Pretraining"/>
+  <img src="https://img.shields.io/badge/Post--Training-AMD_MI300X%20%2B%20Modal-blue.svg" alt="Post-Training"/>
+</p>
+
+# TinyMathReason-1B 🧮
 
 **TinyMathReason-1B is a 1.12B-parameter decoder-only transformer trained from scratch for mathematical reasoning.**
 
