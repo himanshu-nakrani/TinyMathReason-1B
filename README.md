@@ -526,6 +526,7 @@ Top-level commands:
 - `make eval` — run benchmark and comparison scripts
 
 Supporting docs:
+- `docs/complete_process_playbook.md` (complete end-to-end playbook)
 - `docs/pretraining_setup.md`
 - `docs/sft_setup.md`
 - `docs/dpo_setup.md`
@@ -569,11 +570,12 @@ If you are new to the repository, this order works well:
 
 1. `README.md`
 2. `STATUS.md`
-3. `docs/architecture.md`
-4. `docs/pretraining_setup.md`
-5. `src/train/convert_checkpoint.py`
-6. `docs/sft_setup.md`
-7. `src/eval/run_benchmarks.py`
+3. `docs/complete_process_playbook.md`
+4. `docs/architecture.md`
+5. `docs/pretraining_setup.md`
+6. `src/train/convert_checkpoint.py`
+7. `docs/sft_setup.md`
+8. `src/eval/run_benchmarks.py`
 
 For the full narrative write-ups, see the `writeups/` folder (Medium articles, technical report, and Twitter thread).
 
